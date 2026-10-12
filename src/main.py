@@ -3,6 +3,7 @@ Main entry point for the Flask application.
 """
 from flask import Flask, Response, jsonify, request
 from utils.config import get_config_class_path
+from api_endpoints import api
 from utils.logging import error_counter, set_logging_configuration
 
 
@@ -19,7 +20,6 @@ def create_app(config_object: str = "utils.config.DevConfig") -> Flask:
     debug = bool(app.config.get("DEBUG", False))
     set_logging_configuration(debug=debug)
 
-    from api_endpoints import api
     app.register_blueprint(api)
 
     @app.after_request
