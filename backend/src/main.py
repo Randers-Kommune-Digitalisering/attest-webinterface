@@ -2,9 +2,9 @@
 Main entry point for the Flask application.
 """
 from flask import Flask, Response, jsonify, request
-from utils.config import get_config_class_path
-from api_endpoints import api
-from utils.logging import error_counter, set_logging_configuration
+from backend.src.utils.config import get_config_class_path
+from backend.src.api_endpoints import api
+from backend.src.utils.logging import error_counter, set_logging_configuration
 
 
 def create_app(config_object: str = "utils.config.DevConfig") -> Flask:

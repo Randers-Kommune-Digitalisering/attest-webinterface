@@ -126,7 +126,7 @@ def get_completed_history() -> list[dict]:
             r.subject_cpr AS "cpr",
             o.attest_type AS "attestType",
             o.attest_subtype AS "attestSubType",
-            o.status AS "status",
+            o.status AS "status"
         FROM attestation_order o
         JOIN attestation_request r ON r.request_id = o.request_id
         WHERE o.status IN ('received', 'journalized', 'notified', 'rejected')
@@ -150,32 +150,59 @@ def get_completed_history() -> list[dict]:
         raise DataBaseError("couldn't fetch completed history") from error
 
 
-def mark_order_as_ordered(order_id: str, actor: str) -> bool:
+def mark_orders_as_ordered(order_ids: list[str], actor: str) -> int:
     """
     Set a pending order to 'ordered' and append an audit event in one transaction.
 
-    :param order_id: The attestation_order.order_id to update.
+    :param order_ids: The attestation_order.order_id values to update.
     :param actor: DQ number of the user performing the action.
-    :return: True if the order was updated, False if it was not found or not pending.
+    :return: The number of orders that were updated.
     """
-    update_query = """
-        UPDATE attestation_order
-        SET status = 'ordered', ordered_at = now()
-        WHERE order_id = %s
-            AND status = 'pending_order'
-    """
-    insert_event_query = """
+    query = """
+        WITH updated_orders AS (
+            UPDATE attestation_order
+            SET status = 'ordered', ordered_at = now()
+            WHERE order_id = ANY(%s)
+                AND status = 'pending_order'
+            RETURNING order_id
+        )
         INSERT INTO order_event (order_id, status, actor)
-        VALUES (%s, 'ordered', %s)
+        SELECT order_id, 'ordered', %s
+        FROM updated_orders
+        RETURNING order_id
     """
 
     try:
         with psycopg.connect(os.environ["DATABASE_URL"]) as connection:
             with connection.cursor() as cursor:
-                cursor.execute(update_query, (order_id,))
+                cursor.execute(query, (order_ids, actor))
+                return len(cursor.fetchall())
+    except psycopg.Error as error:
+        raise DataBaseError("couldn't mark orders as ordered") from error
+
+
+def reject_order(order_id: str, actor: str) -> bool:
+    query = """
+        UPDATE attestation_order
+        SET status = 'rejected'
+        WHERE order_id = %s
+        AND status = 'pending_order'
+    """
+    insert_event_query = """
+        INSERT INTO order_event (order_id, status, actor)
+        VALUES(%s, 'rejected', %s)
+"""
+
+    try:
+        with psycopg.connect(
+            os.environ["DATABASE_URL"],
+            row_factory=dict_row,
+        ) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(query, (order_id,))
                 if cursor.rowcount == 0:
                     return False
                 cursor.execute(insert_event_query, (order_id, actor))
                 return True
     except psycopg.Error as error:
-        raise DataBaseError("couldn't mark order as ordered") from error
+        raise DataBaseError("couldn't reject order") from error

@@ -4,7 +4,7 @@ from typing import Iterator
 import pytest
 from flask import Flask
 from flask.testing import FlaskClient
-from main import create_app
+from backend.src.main import create_app
 
 os.environ.setdefault("FLASK_ENV", "dev")
 

@@ -2,14 +2,16 @@
 API endpoints for the Flask application.
 """
 import logging
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 
-from order_repository import (
+from backend.src.order_repository import (
     get_pending_orders,
     get_all_pending_orders,
     get_pending_order_counts,
     get_ordered_history as fetch_ordered_history,
     get_completed_history as fetch_completed_history,
+    mark_orders_as_ordered,
+    reject_order,
     DataBaseError
 )
 
@@ -69,4 +71,37 @@ def get_completed_orders():
         return jsonify(rows), 200
     except DataBaseError as error:
         logger.error("Failed to fetch completed history: %s", error)
+        return jsonify({"success": False, "error": str(error)}), 500
+
+
+#TODO: ændr actor til noget passende
+@api.post("/rejectorder/<string:order_id>", methods=["POST"])
+def reject_order_endpoint(order_id: str):
+    try:
+        success = reject_order(order_id=order_id, actor="webinterface")
+        return jsonify({"success": success}), 200
+    except DataBaseError as error:
+        logger.error("Failed to reject order: %s", error)
+        return jsonify({"success": False, "error": str(error)}), 500
+
+
+#TODO: ændr actor til noget passende
+@api.post("/processorders", methods=["POST"])
+def mark_order_as_ordered_endpoint():
+    order_ids = request.get_json(silent=True)
+    if (
+        not isinstance(order_ids, list)
+        or not order_ids
+        or not all(isinstance(order_id, str) for order_id in order_ids)
+    ):
+        return jsonify({"success": False, "error": "Expected a list of order IDs"}), 400
+    
+    try:
+        updated_count: int = mark_orders_as_ordered(
+            order_ids=order_ids,
+            actor="webinterface"
+        )
+        return jsonify({"success": True, "updated_count": updated_count}), 200
+    except DataBaseError as error:
+        logger.error("Failed to mark orders as ordered: %s", error)
         return jsonify({"success": False, "error": str(error)}), 500
