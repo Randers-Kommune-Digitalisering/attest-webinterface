@@ -36,3 +36,8 @@ export const rejectOrderEndpoint = (orderId, reason, description) =>
 export const markOrderAsOrderedEndpoint = (orderIds) =>
     api.post(`/processorders`, orderIds)
         .then(response => response.data)
+
+
+export const getExpressStatus = () =>
+    axios.get('/status')
+        .then(response => response.data)

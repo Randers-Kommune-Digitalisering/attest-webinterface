@@ -6,6 +6,12 @@
     import Content from '@/components/Content.vue'
     import IconTable from '@/components/icons/IconTable.vue'
 
+    import {
+        getOrders,
+        markOrderAsOrderedEndpoint,
+        rejectOrderEndpoint
+    } from '@/backendService'
+
     const props = defineProps({
         attestTypes: {
             type: Array,
@@ -62,8 +68,7 @@
         flowStep.value = 0
 
         // Retrieve orders for type+subtype
-        fetch('/api/orders/' + attestType.value + '/' + attestSubType.value)
-            .then(response => response = response.json())
+        getOrders(attestType.value, attestSubType.value)
             .then(value => orders.value = value)
     }
 
@@ -130,23 +135,13 @@
         var idCount = idList.length
 
         // Perform POST request to backend
-        fetch('/api/processorders', {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(idList),
-        })
-        .then(response => console.log(response.json()))
-        .then(callSetCount(-idCount))
-        //.then(callUpdate())
-        .then(callUpdateOrders()) 
-
-        // Set orders = []
-        .then(orders.value = [])
-
-        // Set notification
-        notification.value = ordersProcessedNotification(idCount)
+        markOrderAsOrderedEndPoint(idList)
+            .then(() => {
+                callSetCount(-idCount)
+                callUpdateOrders()
+                orders.value = []
+                notification.value = ordersProcessedNotification(idCount)
+            })
     }
 
     // Reject order
@@ -162,26 +157,20 @@
     function reject(item)
     {
         // Perform POST request to backend
-        fetch('/api/rejectorder/' + item.orderId, {
-            method: "POST",
-            body: JSON.stringify({
-                "reason": rejectionReason.value,
-                "description": reasonDescription[rejectionReason.value]
-            }),
-        })
-        .then(response => response.json())
-        .then(response => console.log(response))
-        .then(orders.value = orders.value.filter(x => x !== item))  // Remove order from list
-        .then(callSetCount(-1))
-        .then(callUpdateOrders())         
-        
+        rejectorderEndPoint(
+            item.orderId,
+            rejectionReason.value,
+            reasonDescription[rejectionReason.value]
+        ).then(() => {
+        orders.value = orders.value.filter(order => order !== item)
+        callSetCount(-1)
+        callUpdateOrders()
+
         isRejectingOrder.value = false
         rejectionReason.value = ""
         reasonDescription["other"] = ""
-
-        // Set notification
         notification.value = ordersProcessedNotification(1, true)
-    }
+    })
 
 </script>
 
@@ -208,15 +197,15 @@
                 <thead>
                     <tr>
                         <th>Dato <div class="text-small">Anmodet</div></th>
-                        <th>Rekvirent <div class="text-small">Navn og mail-adresse</div></th>
+                        <th>Rekvirent <div class="text-small">Navn</div></th>
                         <th>Rekvisitus <div class="text-small">CPR-nummer</div></th>
                         <th></th>
                     </tr>
                 </thead>
                 
                 <tr v-if="orders.length > 0" v-for="order in orders">
-                    <td>{{ dayjs(order.bestillingModtaget).format("DD-MM-YYYY") }}</td>
-                    <td>{{ order.rekvirentNavn }} <div class="text-small">{{ order.rekvirentEmail }}</div></td>
+                    <td>{{ dayjs(order.requestedAt).format("DD-MM-YYYY") }}</td>
+                    <td>{{ order.requesterName }}</td>
                     <td>{{ order.cpr }}</td>
                     <td><button class="red" @click="isRejectingOrder = order">Afvis</button></td>
                 </tr>

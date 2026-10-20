@@ -2,7 +2,7 @@
     defineExpose( { updateOrderCount, setOrderCount } )
 
     import { ref, useCssModule } from 'vue'
-
+    import { getOrderCount } from '@/backendService'
     // Set menu items
 
     const menuItems = ref([
@@ -41,15 +41,15 @@
 
     function updateOrderCount()
     {
-        fetch('/api/ordercount')
-            .then(response => response = response.json())
-            .then(response => {
-                var totalCount = 0
-                if(response.length > 0)
-                    response.forEach(element => {
-                        totalCount += element.count
-                    })
-                setAlert("Bestillinger", totalCount)
+        getOrderCount().then(counts => {
+            let totalCount = 0
+
+            if (counts.length > 0)
+                counts.forEach(element => {
+                    totalCount += element.count
+                })
+            
+            setAlert("Bestillinger", totalCount)
         })
     }
 

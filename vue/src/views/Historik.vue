@@ -6,6 +6,17 @@
     import attestTyper from '@/assets/attestTypes.json'
     import IconTable from '@/components/icons/IconTable.vue'
 
+    import { getOrderedHistory,
+             getCompletedHistory } from '@/backendService'
+
+    const statusLabels = {
+        received: 'Modtaget',
+        under_review: 'Under vurdering',
+        journalized: 'Journaliseret',
+        sent_to_requester: 'Sendt til rekvirent',
+        rejected: 'Afvist'
+    }
+
     // Get orders
 
     const allOrders = ref([])
@@ -13,11 +24,11 @@
     const isSearchingOrders = ref(false)
     const searchKeyword = ref("")
 
-    fetch('/api/history/ordered')
-    .then(response => response = response.json())
-    //.then(value => value = filterByType(value))
-    .then(value => allOrders.value = value)
-    .then(value => orders.value = value)
+    getOrderedHistory()
+    .then(value => {
+        allOrders.value = value
+        orders.value = value
+    })
 
 
     const allOrdersFinished = ref([])
@@ -25,19 +36,12 @@
     const isSearchingFinishedOrders = ref(false)
     const searchFinishedKeyword = ref("")
 
-    fetch('/api/history/completed')
-    .then(response => response = response.json())
-    //.then(value => value = filterByType(value))
-    .then(value => allOrdersFinished.value = value)
-    .then(value => ordersFinished.value = value.slice(0, 10))
+    getCompletedHistory()
+    .then(value => {
+        allOrdersFinished.value = value
+        ordersFinished.value = value.slice(0, 10)
+    })
 
-    function returnOrderStatusColor(erAfvist)
-    {
-        if(erAfvist == 1)
-            return "red"
-        else 
-            return ""
-    }
 
     function toggleSearchOrders()
     {
@@ -69,17 +73,17 @@
 
     function searchList(list, keyword)
     {
-        keyword = keyword.toLowerCase().trim()
-        return list.filter(x => x.rekvirentNavn.toLowerCase().includes(keyword) ||
-                                x.rekvirentDQ.toLowerCase().includes(keyword) ||
-                                x.rekvirentEmail.toLowerCase().includes(keyword) ||
-                                x.cpr.includes(keyword) ||
-                                x.cpr.replace("-", "").includes(keyword) ||
-                                x.navn.toLowerCase().includes(keyword) )
+        const search = keyword.toLowerCase().trim()
+        return list.filter(order =>
+                    order.requesterName.toLowerCase().includes(search) ||
+                    order.requesterDq.toLowerCase().includes(search) ||
+                    order.cpr.includes(search) ||
+                    order.cpr.replace("-", "").includes(search)
+        )
     }
 
 
-    const currentSortColumn = ref("bestillingModtaget")
+    const currentSortColumn = ref("requestedAt")
     const currentSortDesc = ref(true)
 
     function sortList(list, col)
@@ -147,22 +151,22 @@
                         </th>
                     </tr>
                     <tr>
-                        <th @click="sortOrders('bestillingModtaget')">Dato <div class="text-small">Anmodet</div></th>
-                        <th @click="sortOrders('rekvirentNavn')">Rekvirent <div class="text-small">Navn og mail-adresse</div></th>
+                        <th @click="sortOrders('requestedAt')">Dato <div class="text-small">Anmodet</div></th>
+                        <th @click="sortOrders('requesterName')">Rekvirent <div class="text-small">Navn</div></th>
                         <th @click="sortOrders('cpr')">Rekvisitus <div class="text-small">CPR-nummer</div></th>
                         <th @click="sortOrders('attestType')">Attest <div class="text-small">Type</div></th>
-                        <th @click="sortOrders('bestiltHosPoliti')">Dato <div class="text-small">Bestilt</div></th>
+                        <th @click="sortOrders('orderedAt')">Dato <div class="text-small">Bestilt</div></th>
                     </tr>
                 </thead>
                 
                 <tr v-if="orders.length > 0" v-for="order in orders">
-                    <td>{{ dayjs(order.bestillingModtaget).format("DD-MM-YYYY") }}</td>
-                    <td>{{ order.rekvirentNavn }} <div class="text-small">{{ order.rekvirentEmail }}</div></td>
+                    <td>{{ dayjs(order.requestedAt).format("DD-MM-YYYY") }}</td>
+                    <td>{{ order.requesterName }}</td>
                     <td>{{ order.cpr }}</td>
                     <td>{{ (attestTyper.find(x => x.typeId == order.attestType)).name }}
                         <div class="text-small">{{ (attestTyper.find(x => x.typeId == order.attestType && x.subTypeId == order.attestSubType)).description }}</div>
                     </td>
-                    <td>{{ dayjs(order.bestiltHosPoliti).format("DD-MM-YYYY") }}</td>
+                    <td>{{ dayjs(order.orderedAt).format("DD-MM-YYYY") }}</td>
                 </tr>
                 <tr v-else>
                     <td colspan="5">Der er ingen bestillinger at vise.</td>
@@ -194,38 +198,25 @@
                         </th>
                     </tr>
                     <tr>
-                        <th @click="sortFinishedOrders('behandlet')">Dato <div class="text-small">Behandlet</div></th>
-                        <th @click="sortFinishedOrders('rekvirentNavn')">Rekvirent <div class="text-small">Navn og mail-adresse</div></th>
+                        <th @click="sortFinishedOrders('processedAt')">Dato <div class="text-small">Behandlet</div></th>
+                        <th @click="sortFinishedOrders('requesterName')">Rekvirent <div class="text-small">Navn</div></th>
                         <th @click="sortFinishedOrders('cpr')">Rekvisitus <div class="text-small">CPR-nummer</div></th>
                         <th @click="sortFinishedOrders('attestType')">Attest <div class="text-small">Type</div></th>
-                        <th @click="sortFinishedOrders('erAfvist')">Status</th>
+                        <th @click="sortFinishedOrders('status')">Status</th>
                     </tr>
                 </thead>
                 
                 <tr v-if="ordersFinished.length > 0" v-for="order in ordersFinished">
-                    <td>{{ dayjs(order.behandlet).format("DD-MM-YYYY") }}</td>
-                    <td>{{ order.rekvirentNavn }} <div class="text-small">{{ order.rekvirentEmail }}</div></td>
+                    <td>{{ order.processedAt ? dayjs(order.processedAt).format("DD-MM-YYYY") : '-'}}</td>
+                    <td>{{ order.requesterName }}</td>
                     <td>{{ order.cpr }}</td>
                     <td>{{ (attestTyper.find(x => x.typeId == order.attestType)).name }}
                         <div class="text-small">{{ (attestTyper.find(x => x.typeId == order.attestType)).description }}</div>
                     </td>
-                    <td><span :class="returnOrderStatusColor(order.erAfvist)">
-                            {{
-                            order.erAfvist ?
-                                "Afvist" :
-                                order.erJournaliseret == 1 ?
-                                    "Journaliseret" :
-                                        order.erAdviseringAfsendt == 1 ?
-                                        'Sendt til rekvirent' : 
-                                            order.erDublikat  == 1 ? 
-                                                'Dublikat' : 'Modtaget'
-                            }}
+                    <td><span :class="{ red: order.status === 'rejected' }">
+                        {{ statusLabels[order.status] ?? 'Ukendt status'}}
                         </span>
-                        <div class="text-small">
-                            <span :class="returnOrderStatusColor(order.erAdviseringAfsendt == 1 ? 0 : order.erDublikat ? 0 : 1)">
-                                {{ order.erAdviseringAfsendt == 1 ? 'Adviseret' : order.erDublikat  == 1 ? 'Ignoreret' : 'Ikke adviseret' }}
-                            </span>
-                        </div></td>
+                    </td>
                 </tr>
                 <tr v-else>
                     <td colspan="5">Der er ingen bestillinger at vise.</td>

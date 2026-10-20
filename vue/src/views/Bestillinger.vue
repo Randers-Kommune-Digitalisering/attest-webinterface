@@ -6,6 +6,8 @@
     import Attester from '@/components/Attester.vue'
     import attestTyper from '@/assets/attestTypes.json'
 
+    import { getOrderCount } from '@/backendService'
+
     const currentAttestTypes = ref(attestTyper)
 
     const selectedType = ref(null)
@@ -26,7 +28,7 @@
         fetchOrderCount()
     }
 
-    function setAttestType(typeUid, subTypeUid = -1)
+    function setAttestType(typeUid, subTypeUid = null)
     {
         selectedType.value = typeUid
         selectedSubType.value = subTypeUid
@@ -36,19 +38,17 @@
     function fetchOrderCount()
     {
         //console.log("Fetching order count")
+        getOrderCount().then(value => {
+            value = Array.isArray(value) ? value : [value]
 
-        fetch('/api/ordercount')
-            .then(response => response = response.json())
-            //.then(value => orderCount.value = value)
-            .then(value => {
-                value = Array.isArray(value) ? value : [value]
+            attestTyper.forEach(element => {
+                const index = value.findIndex(
+                    x => x.attestType === element.typeId
+                    && x.attestSubType === element.subTypeId
+                )
+                element.count = index != -1 ? value[index].count : 0
+            })
 
-                attestTyper.forEach(element => {
-                    var index = value.findIndex(x => x.attestType === element.typeId && x.attestSubType === element.subTypeId)
-                    element.count = index != -1 ? value[index].count : 0
-                })
-
-                delete currentAttestTypes.value
                 currentAttestTypes.value = JSON.parse(JSON.stringify(attestTyper))
             })
     }
@@ -87,7 +87,7 @@
     </div>
     </Content>
 
-    <Attester v-if="selectedType != null && selectedSubType != null"
+    <Attester v-if="selectedType != null"
                 @updateOrdersCount="updateOrdersCount"
                 @updateOrderCount="callUpdate"
                 @setOrderCount="callSetCount"

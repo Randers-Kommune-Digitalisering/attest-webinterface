@@ -34,10 +34,18 @@ def get_all_orders():
         return jsonify({"success": False, "error": str(error)}), 500
 
 
-@api.get("/orders/<int:attest_type>/<int:sub_type>", methods=["GET"])
-def get_orders(attest_type: int, sub_type: int):
+@api.get("/orders/<int:attest_type>/<string:sub_type>", methods=["GET"])
+def get_orders(attest_type: int, sub_type: str):
+    if sub_type == "null":
+        parsed_sub_type = None
+    else:
+        try:
+            parsed_sub_type = int(sub_type)
+        except ValueError:
+            return jsonify({"success": False, "error": "Invalid attestation subtype"}), 400
+
     try:
-        rows = get_pending_orders(attest_type, sub_type)
+        rows = get_pending_orders(attest_type, parsed_sub_type)
         return jsonify(rows), 200
     except DataBaseError as error:
         logger.error("Failed to fetch orders: %s", error)

@@ -34,7 +34,7 @@ def get_all_pending_orders() -> list[dict]:
         raise DataBaseError("Couldn't fetch all pending orders") from error
 
 
-def get_pending_orders(attest_type: int, sub_type: int) -> list[dict]:
+def get_pending_orders(attest_type: int, sub_type: int | None) -> list[dict]:
     query = """
         SELECT
             o.order_id AS "orderId",
@@ -46,7 +46,7 @@ def get_pending_orders(attest_type: int, sub_type: int) -> list[dict]:
         JOIN attestation_request r ON r.request_id = o.request_id
         WHERE o.status = 'pending_order'
             AND o.attest_type = %s
-            AND o.attest_subtype = %s
+            AND o.attest_subtype IS NOT DISTINCT FROM %s
         ORDER BY r.requested_at DESC, r.requester_dq
     """
 
@@ -126,15 +126,27 @@ def get_completed_history() -> list[dict]:
             r.subject_cpr AS "cpr",
             o.attest_type AS "attestType",
             o.attest_subtype AS "attestSubType",
-            o.status AS "status"
+            o.status AS "status",
+            event.occurred_at AS "processedAt"
         FROM attestation_order o
         JOIN attestation_request r ON r.request_id = o.request_id
-        WHERE o.status IN ('received', 'journalized', 'notified', 'rejected')
+        LEFT JOIN LATERAL (
+                    SELECT e.occurred_at
+                    FROM order_event e
+                    WHERE e.order_id = o.order_id
+                        AND e.status = o.status
+                    ORDER BY e.occurred_at DESC, e.event_id DESC
+                    LIMIT 1
+                    ) event ON true
+        WHERE o.status IN (
+            'under_review',
+            'journalized',
+            'sent_to_requester',
+            'rejected'
+        )
         ORDER BY
-            r.requested_at DESC,
-            o.attest_type,
-            o.attest_subtype,
-            r.requester_dq
+            event.occurred_at DESC NULLS LAST,
+            r.requested_at DESC
         LIMIT 1000
     """
 
