@@ -152,7 +152,7 @@
                     </tr>
                     <tr>
                         <th @click="sortOrders('requestedAt')">Dato <div class="text-small">Anmodet</div></th>
-                        <th @click="sortOrders('requesterName')">Rekvirent <div class="text-small">Navn</div></th>
+                        <th @click="sortOrders('requesterName')">Rekvirent <div class="text-small">Navn og email-adresse</div></th>
                         <th @click="sortOrders('cpr')">Rekvisitus <div class="text-small">CPR-nummer</div></th>
                         <th @click="sortOrders('attestType')">Attest <div class="text-small">Type</div></th>
                         <th @click="sortOrders('orderedAt')">Dato <div class="text-small">Bestilt</div></th>
@@ -161,7 +161,7 @@
                 
                 <tr v-if="orders.length > 0" v-for="order in orders">
                     <td>{{ dayjs(order.requestedAt).format("DD-MM-YYYY") }}</td>
-                    <td>{{ order.requesterName }}</td>
+                    <td>{{ order.requesterName }}<div class="text-small">{{ order.requesterEmail }}</div></td>
                     <td>{{ order.cpr }}</td>
                     <td>{{ (attestTyper.find(x => x.typeId == order.attestType)).name }}
                         <div class="text-small">{{ (attestTyper.find(x => x.typeId == order.attestType && x.subTypeId == order.attestSubType)).description }}</div>
@@ -199,7 +199,7 @@
                     </tr>
                     <tr>
                         <th @click="sortFinishedOrders('processedAt')">Dato <div class="text-small">Behandlet</div></th>
-                        <th @click="sortFinishedOrders('requesterName')">Rekvirent <div class="text-small">Navn</div></th>
+                        <th @click="sortFinishedOrders('requesterName')">Rekvirent <div class="text-small">Navn og email-adresse</div></th>
                         <th @click="sortFinishedOrders('cpr')">Rekvisitus <div class="text-small">CPR-nummer</div></th>
                         <th @click="sortFinishedOrders('attestType')">Attest <div class="text-small">Type</div></th>
                         <th @click="sortFinishedOrders('status')">Status</th>
@@ -208,7 +208,7 @@
                 
                 <tr v-if="ordersFinished.length > 0" v-for="order in ordersFinished">
                     <td>{{ order.processedAt ? dayjs(order.processedAt).format("DD-MM-YYYY") : '-'}}</td>
-                    <td>{{ order.requesterName }}</td>
+                    <td>{{ order.requesterName }}<div class="text-small">{{ order.requesterEmail }}</div></td>
                     <td>{{ order.cpr }}</td>
                     <td>{{ (attestTyper.find(x => x.typeId == order.attestType)).name }}
                         <div class="text-small">{{ (attestTyper.find(x => x.typeId == order.attestType)).description }}</div>

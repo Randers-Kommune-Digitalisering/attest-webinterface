@@ -135,7 +135,7 @@
         var idCount = idList.length
 
         // Perform POST request to backend
-        markOrderAsOrderedEndPoint(idList)
+        markOrderAsOrderedEndpoint(idList)
             .then(() => {
                 callSetCount(-idCount)
                 callUpdateOrders()
@@ -157,7 +157,7 @@
     function reject(item)
     {
         // Perform POST request to backend
-        rejectorderEndPoint(
+        rejectOrderEndpoint(
             item.orderId,
             rejectionReason.value,
             reasonDescription[rejectionReason.value]
@@ -171,6 +171,7 @@
         reasonDescription["other"] = ""
         notification.value = ordersProcessedNotification(1, true)
     })
+    }
 
 </script>
 
@@ -197,7 +198,7 @@
                 <thead>
                     <tr>
                         <th>Dato <div class="text-small">Anmodet</div></th>
-                        <th>Rekvirent <div class="text-small">Navn</div></th>
+                        <th>Rekvirent <div class="text-small">Navn og email-adresse</div></th>
                         <th>Rekvisitus <div class="text-small">CPR-nummer</div></th>
                         <th></th>
                     </tr>
@@ -205,7 +206,7 @@
                 
                 <tr v-if="orders.length > 0" v-for="order in orders">
                     <td>{{ dayjs(order.requestedAt).format("DD-MM-YYYY") }}</td>
-                    <td>{{ order.requesterName }}</td>
+                    <td>{{ order.requesterName }}<div class="text-small">{{ order.requesterEmail }}</div></td>
                     <td>{{ order.cpr }}</td>
                     <td><button class="red" @click="isRejectingOrder = order">Afvis</button></td>
                 </tr>

@@ -19,12 +19,12 @@ api = Blueprint("api", __name__, url_prefix="/api")
 logger = logging.getLogger(__name__)
 
 
-@api.get("/status", methods=["GET"])
+@api.get("/status")
 def status():
     return jsonify({"success": True}), 200
 
 
-@api.get("/orders", methods=["GET"])
+@api.get("/orders")
 def get_all_orders():
     try:
         rows = get_all_pending_orders()
@@ -34,7 +34,7 @@ def get_all_orders():
         return jsonify({"success": False, "error": str(error)}), 500
 
 
-@api.get("/orders/<int:attest_type>/<string:sub_type>", methods=["GET"])
+@api.get("/orders/<int:attest_type>/<string:sub_type>")
 def get_orders(attest_type: int, sub_type: str):
     if sub_type == "null":
         parsed_sub_type = None
@@ -52,7 +52,7 @@ def get_orders(attest_type: int, sub_type: str):
         return jsonify({"success": False, "error": str(error)}), 500
 
 
-@api.get("/ordercount", methods=["GET"])
+@api.get("/ordercount")
 def get_order_count():
     try:
         rows = get_pending_order_counts()
@@ -62,7 +62,7 @@ def get_order_count():
         return jsonify({"success": False, "error": str(error)}), 500
 
 
-@api.get("/history/ordered", methods=["GET"])
+@api.get("/history/ordered")
 def get_ordered_history():
     try:
         rows = fetch_ordered_history()
@@ -72,7 +72,7 @@ def get_ordered_history():
         return jsonify({"success": False, "error": str(error)}), 500
 
 
-@api.get("/history/completed", methods=["GET"])
+@api.get("/history/completed")
 def get_completed_orders():
     try:
         rows = fetch_completed_history()
@@ -82,8 +82,8 @@ def get_completed_orders():
         return jsonify({"success": False, "error": str(error)}), 500
 
 
-#TODO: ændr actor til noget passende
-@api.post("/rejectorder/<string:order_id>", methods=["POST"])
+# TODO: ændr actor til noget passende
+@api.post("/rejectorder/<string:order_id>")
 def reject_order_endpoint(order_id: str):
     try:
         success = reject_order(order_id=order_id, actor="webinterface")
@@ -93,8 +93,8 @@ def reject_order_endpoint(order_id: str):
         return jsonify({"success": False, "error": str(error)}), 500
 
 
-#TODO: ændr actor til noget passende
-@api.post("/processorders", methods=["POST"])
+# TODO: ændr actor til noget passende
+@api.post("/processorders")
 def mark_order_as_ordered_endpoint():
     order_ids = request.get_json(silent=True)
     if (
@@ -103,7 +103,7 @@ def mark_order_as_ordered_endpoint():
         or not all(isinstance(order_id, str) for order_id in order_ids)
     ):
         return jsonify({"success": False, "error": "Expected a list of order IDs"}), 400
-    
+
     try:
         updated_count: int = mark_orders_as_ordered(
             order_ids=order_ids,

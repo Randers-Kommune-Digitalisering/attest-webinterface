@@ -14,6 +14,7 @@ def get_all_pending_orders() -> list[dict]:
             o.order_id AS "orderId",
             r.requested_at AS "requestedAt",
             r.requester_name AS "requesterName",
+            r.requester_email AS "requesterEmail",
             r.requester_dq AS "requesterDq",
             r.subject_cpr AS "cpr"
         FROM attestation_order o
@@ -40,6 +41,7 @@ def get_pending_orders(attest_type: int, sub_type: int | None) -> list[dict]:
             o.order_id AS "orderId",
             r.requested_at AS "requestedAt",
             r.requester_name AS "requesterName",
+            r.requester_email AS "requesterEmail",
             r.requester_dq AS "requesterDq",
             r.subject_cpr AS "cpr"
         FROM attestation_order o
@@ -90,6 +92,7 @@ def get_ordered_history() -> list[dict]:
         SELECT
             r.requested_at AS "requestedAt",
             r.requester_name AS "requesterName",
+            r.requester_email AS "requesterEmail",
             r.requester_dq AS "requesterDq",
             r.subject_cpr AS "cpr",
             o.attest_type AS "attestType",
@@ -122,6 +125,7 @@ def get_completed_history() -> list[dict]:
         SELECT
             r.requested_at AS "requestedAt",
             r.requester_name AS "requesterName",
+            r.requester_email AS "requesterEmail",
             r.requester_dq AS "requesterDq",
             r.subject_cpr AS "cpr",
             o.attest_type AS "attestType",
@@ -142,6 +146,7 @@ def get_completed_history() -> list[dict]:
             'under_review',
             'journalized',
             'sent_to_requester',
+            'received',
             'rejected'
         )
         ORDER BY
