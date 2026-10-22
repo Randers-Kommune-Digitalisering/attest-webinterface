@@ -197,7 +197,7 @@ def mark_orders_as_ordered(order_ids: list[str], actor: str) -> int:
     Mark specified pending orders as 'ordered' and record an audit event in a single transaction.
 
     Param: order_ids: list[str]: The attestation_order.order_id values to update.
-    Param: actor: str: DQ number of the user performing the action.
+    Param: actor: str: Email of the user performing the action.
     Return: The number of orders that were updated.
     """
     query = """
@@ -227,7 +227,7 @@ def reject_order(order_id: str, actor: str, reason: str, description: str) -> bo
     Reject a pending order and record an audit event.
 
     Param: order_id: str: The attestation_order.order_id to reject.
-    Param: actor: str: DQ number of the user performing the action.
+    Param: actor: str: Email of the user performing the action.
     Param: reason: str: The reason for rejection.
     Param: description: str: Detailed description of the rejection.
     Return: True if the order was successfully rejected, False otherwise.

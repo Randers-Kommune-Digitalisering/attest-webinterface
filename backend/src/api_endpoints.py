@@ -2,7 +2,7 @@
 API endpoints for the Flask application.
 """
 import logging
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, session
 
 from backend.src.order_repository import (
     get_pending_orders,
@@ -127,7 +127,6 @@ def get_completed_orders() -> tuple[dict, int]:
         return jsonify({"success": False, "error": str(error)}), 500
 
 
-# TODO: ændr actor til noget passende
 @api.post("/rejectorder/<string:order_id>")
 def reject_order_endpoint(order_id: str) -> tuple[dict, int]:
     """
@@ -139,6 +138,10 @@ def reject_order_endpoint(order_id: str) -> tuple[dict, int]:
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
         return jsonify({"success": False, "error": "Expected a JSON object"}), 400
+
+    actor = _get_actor_email()
+    if actor is None:
+        return jsonify({"success": False, "error": "Not authenticated"}), 401
 
     reason = payload.get("reason")
     description = payload.get("description")
@@ -159,7 +162,7 @@ def reject_order_endpoint(order_id: str) -> tuple[dict, int]:
     try:
         success = reject_order(
             order_id=order_id,
-            actor="webinterface",
+            actor=actor,
             reason=reason,
             description=description,
             )
@@ -169,7 +172,6 @@ def reject_order_endpoint(order_id: str) -> tuple[dict, int]:
         return jsonify({"success": False, "error": str(error)}), 500
 
 
-# TODO: ændr actor til noget passende
 @api.post("/processorders")
 def mark_order_as_ordered_endpoint() -> tuple[dict, int]:
     """
@@ -177,6 +179,10 @@ def mark_order_as_ordered_endpoint() -> tuple[dict, int]:
 
     Return: JSON response indicating success or failure and HTTP status code
     """
+    actor = _get_actor_email()
+    if actor is None:
+        return jsonify({"success": False, "error": "Not authenticated"}), 401
+
     order_ids = request.get_json(silent=True)
     if (
         not isinstance(order_ids, list)
@@ -188,9 +194,23 @@ def mark_order_as_ordered_endpoint() -> tuple[dict, int]:
     try:
         updated_count: int = mark_orders_as_ordered(
             order_ids=order_ids,
-            actor="webinterface",
+            actor=actor,
         )
         return jsonify({"success": True, "updated_count": updated_count}), 200
     except DataBaseError as error:
         logger.error("Failed to mark orders as ordered: %s", error)
         return jsonify({"success": False, "error": str(error)}), 500
+
+
+def _get_actor_email() -> str | None:
+    """
+    Get the email of the logged-in user from the session.
+
+    :return: The user's email, or None if not authenticated
+    """
+    user_info = session.get("user") or {}
+    email = user_info.get("email")
+    if not isinstance(email, str) or not email.strip():
+        return None
+
+    return email.strip()

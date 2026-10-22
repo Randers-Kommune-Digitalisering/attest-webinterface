@@ -1,5 +1,5 @@
 # attest-webinterface
-[**Formål**](#formål) | [**Beskrivelse**](#beskrivelse) | [**Dataflow**](#dataflow) | [**Features**](#features) | [**Afhængigheder**](#afh%C3%A6ngigheder) | [**API**](#api) | [**Udvikling**](#udvikling)
+[**Formål**](#formål) | [**Beskrivelse**](#beskrivelse) | [**Dataflow**](#dataflow) | [**Features**](#features) | [**Login og adgang**](#login-og-adgang) | [**Afhængigheder**](#afh%C3%A6ngigheder) | [**API**](#api) | [**Udvikling**](#udvikling)
 
 # Formål
 
@@ -50,6 +50,21 @@ Webinterfacet taler kun med Flask-API'et. Ved **læsning** henter API'et bestill
 - Viser historik over bestilte og færdigbehandlede bestillinger
 - Udbyder et healthcheck-endpoint til overvågning
 
+## Login og adgang
+
+Brugere logger ind via Keycloak (OpenID Connect). Kun brugere med klientrollen `attest-admin` på Keycloak-klienten (`KEYCLOAK_CLIENT_ID`) får adgang
+
+1. Frontend'en kalder API'et. Hvis brugeren ikke er logget ind, svarer API'et `401`, og frontend'en sender brugeren videre til `/api/login`.
+2. `/api/login` sender brugeren til Keycloak
+3. Efter login vender brugeren tilbage til `/api/auth`. Backend'en kontrollerer rollen `attest-admin`:
+    - Har brugeren rollen, gemmes navn, e-mail og roller i en session-cookie
+    - Mangler rollen, svarer backend'en `403`
+4. Når en bestilling markeres som bestilt eller afvises, gemmes brugerens e-mail som `actor` i `order_event`
+
+### Lokal udvikling uden Keycloak
+
+Når `DISABLE_KEYCLOAK=true` er sat, logges der automatisk ind som en fast testbruger (`test@test.dk`) med rollen `attest-admin`. Det er kun tilladt med `FLASK_ENV=dev`. med `FLASK_ENV=prod` stopper applikationen ved opstart.
+
 ## Afhængigheder
 
 ### Database
@@ -57,12 +72,15 @@ Webinterfacet taler kun med Flask-API'et. Ved **læsning** henter API'et bestill
 Applikationen kræver adgang til en PostgreSQL-database
 
 Databasen skal indeholde de tabeller og felter, som backendens forespørgsler bruger:
-`attestation_order`, `attestation_request` og `order_event`
+`attestation_order`, `attestation_request` og `order_event`.
+
+Ved hver handling oprettes en hændelse i `order_event` med brugerens e-mail (`actor`). Ved afvisning gemmes også `rejection_reason` og `rejection_description`.
 
 ### Teknologier
 - [Flask](https://flask.palletsprojects.com/) - backend og API
 - [Vue](https://vuejs.org/) og [vite](https://vite.dev/) - brugergrænseflade
 - [PostgreSQL](https://www.postgresql.org/) - lagring af bestillinger og hændelser
+- [Keycloak](https://www.keycloak.org/) og [AuthLib](https://docs.authlib.org/) - login via OpenID Connect
 
 ### Miljøvariabler
 | Variabel | Påkrævet | Beskrivelse |
@@ -72,8 +90,14 @@ Databasen skal indeholde de tabeller og felter, som backendens forespørgsler br
 | `PORT` | Nej | Backendens port. Standard er `8080`. |
 | `DEBUG` | Nej | Aktiverer debug-logning. Standard afhænger af `FLASK_ENV`. |
 | `POD_NAME` | Nej | Navn på applikationens pod. Standard er `pod_name_not_set`. |
-| `SECRET_KEY` | Nej | Flask secret key. Skal konfigureres sikkert i driftsmiljøet. 
+| `SECRET_KEY` | Ja med Keycloak | Bruges til at signere session-cookien. Applikationen starter ikke hvis den mangler eller er `CHANGE_ME`. |
+| `DISABLE_KEYCLOAK` | Nej | `true` slår Keycloak fra og bruger en testbruger. Kun tilladt med `FLASK_ENV=dev`. Standard er `false`. |
+| `KEYCLOAK_URL` | Ja med Keycloak | Base-URL til Keycloak. | 
+| `KEYCLOAK_REALM` | Ja med Keycloak | Keycloak-realm |
+| `KEYCLOAK_CLIENT_ID` | Ja med Keycloak | Klient-id i Keycloak. Rollen `attest-admin` skal ligge på denne klient. | 
+| `KEYCLOAK_CLIENT_SECRET` | Ja med Keycloak | Klienthemmelighed i Keycloak | 
 
+Lokalt kan variablerne sættes i en `.env`-fil (se [.env.example](.env.example)). Filen ignoreres af git.
 Hemmelige værdier og adgangsoplysninger må ikke gemmes i kildekoden eller versionsstyres
 
 ## API 
@@ -83,6 +107,9 @@ Backendens API bruger præfikset `/api`.
 | Metode | Endpoint | Beskrivelse |
 |---|---|---|
 | `GET` | `/healthz` | Healthcheck for Flask-applikationen. |
+| `GET` | `/api/login` | Sender brugeren til login i Keycloak |
+| `GET` | `/api/auth` | Modtager brugeren efter login og opretter sessionen. |
+| `GET` | `/api/userinfo` | Returnerer navn, e-mail og roller for den indloggede bruger. |
 | `GET` | `/api/status` | Status for backend-API'et |
 | `GET` | `/api/orders` | Henter alle ventende bestillinger. |
 | `GET` | `/api/orders/<attest_type>/<sub_type>` | Henter ventende bestillinger for en attesttype og subtype. Brug `null` som undertype hvis den ikke er angivet. |
@@ -91,6 +118,8 @@ Backendens API bruger præfikset `/api`.
 | `GET` | `/api/history/completed` | henter færdigbehandlede bestillinger. |
 | `POST` | `/api/rejectorder/<order_id>` | Afviser en ventende bestilling. |
 | `POST` | `/api/processorders` | Markerer en liste af ventende bestillinger som bestilt. |
+
+Kald uden gyldig session svarer `401 Not authenticated`.
 
 `POST /api/processorders` forventer en JSON-liste med bestillings-id'er:
 ```json
@@ -164,8 +193,9 @@ py -m venv .venv
 pip install -r requirements.txt -r requirements-dev.txt
 
 $env:DATABASE_URL = "postgresql://attest:kun_til_lokal_test@127.0.0.1:5433/attest_local"
-$env:PORT ="1880"
+$env:PORT = "1880"
 $env:FLASK_ENV = "dev"
+$env:DISABLE_KEYCLOAK = "true"
 $env:PYTHONPATH = "$PWD;$PWD\backend\src"
 
 python -m backend.src.main
