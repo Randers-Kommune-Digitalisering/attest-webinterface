@@ -28,6 +28,8 @@ CREATE TABLE order_event (
     order_id text NOT NULL REFERENCES attestation_order(order_id),
     status text NOT NULL,
     actor text NOT NULL,
+    rejection_reason varchar(50),
+    rejection_description text,
     occurred_at timestamptz NOT NULL DEFAULT now()
 );
 

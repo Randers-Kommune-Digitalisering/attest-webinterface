@@ -20,19 +20,25 @@ Interfacet viser også historik over bestilte og færdigbehandlede bestillinger.
 
 ## Dataflow
 ```mermaid
-flowchart LR
-    DB[(PostgreSQL-database)]
-    API[Flask-API]
-    UI[Vue-webinterface]
+sequenceDiagram
+    participant UI as Vue-webinterface
+    participant API as Flask-API
+    participant DB as PostgreSQL-database
 
-    DB -- "Ventende bestillinger og historik" --> API
-    API -- "JSON via /api" --> UI
-    UI -- "Markér som bestilt / afvis" --> API
-    API -- "Opdaterer status og opretter hændelse" --> DB
+    Note over UI,DB: Læsning: vis bestillinger og historik
+    UI->>API: GET /api/orders, /api/ordercount, /api/history/...
+    API->>DB: Henter bestillinger
+    DB-->>API: Bestillinger
+    API-->>UI: JSON
+
+    Note over UI,DB: Opdatering: markér som bestilt eller afvis
+    UI->>API: POST /api/processorders eller /api/rejectorder/{order_id}
+    API->>DB: Opdaterer status og opretter hændelse i order_event
+    DB-->>API: Antal opdaterede bestillinger
+    API-->>UI: Resultat
 ```
 
-Webinterfacet taler kun med Flask-API'et. Det er det, der læser og opdaterer bestillinger 
-i databasen
+Webinterfacet taler kun med Flask-API'et. Ved **læsning** henter API'et bestillinger og historik fra databasen og returnerer dem som JSON. Ved **opdatering** ændrer API'et bestillingens status og registrerer handlingen som en hændelse i `order_event`
 
 
 ## Features
@@ -91,6 +97,15 @@ Backendens API bruger præfikset `/api`.
 ["order-id-1", "order-id-2"]
 ```
 
+`POST /api/rejectorder/<order_id>` forventer et JSON-objekt med reason og description for rejection:
+```json
+{
+    "reason": "incorrect",
+    "description": "Fejl i CPR-nummer. CPR-nummeret findes ikke i CPR-registeret."
+}
+```
+`reason` er en af koderne `incorrect`, `duplicate` eller `other`. `description` gemmes sammen med afvisningshændelsen i `order_event`. For `other` sendes brugerens egen beskrivelse, for de to andre
+faste årsager bruger backend de tilhørende faste tekster. 
 
 ## Udvikling
 

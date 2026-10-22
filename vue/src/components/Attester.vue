@@ -136,11 +136,32 @@
 
         // Perform POST request to backend
         markOrderAsOrderedEndpoint(idList)
-            .then(() => {
-                callSetCount(-idCount)
+            .then(response => {
+                if (
+                    response.success !== true
+                    || !Number.isInteger(response.updated_count)
+                    || response.updated_count < 0
+                    || response.updated_count > idCount
+                ) {
+                    window.alert("Bestillingerne kunne ikke markeres som bestilt.")
+                    return
+                }
+
+                const updatedCount = response.updated_count
+
                 callUpdateOrders()
-                orders.value = []
-                notification.value = ordersProcessedNotification(idCount)
+                fetchOrders()
+
+                if (updatedCount === 0) {
+                    window.alert("Ingen bestillinger blev opdateret. De kan allerede være behandlet.")
+                    return
+                }
+
+                callSetCount(-updatedCount)
+                notification.value=ordersProcessedNotification(updatedCount)
+            })
+            .catch(() => {
+                window.alert("Bestillingerne kunne ikke gemmes. Prøv igen.")
             })
     }
 
@@ -161,15 +182,22 @@
             item.orderId,
             rejectionReason.value,
             reasonDescription[rejectionReason.value]
-        ).then(() => {
-        orders.value = orders.value.filter(order => order !== item)
-        callSetCount(-1)
-        callUpdateOrders()
+        ).then((response) => {
+            if (response.success !== true) {
+                window.alert("Ordren blev ikke afvist. Den kan allerede være behandlet.")
+                return
+            }
 
-        isRejectingOrder.value = false
-        rejectionReason.value = ""
-        reasonDescription["other"] = ""
-        notification.value = ordersProcessedNotification(1, true)
+            orders.value = orders.value.filter(order => order !== item)
+            callSetCount(-1)
+            callUpdateOrders()
+
+            isRejectingOrder.value = false
+            rejectionReason.value = ""
+            reasonDescription["other"] = ""
+            notification.value = ordersProcessedNotification(1, true)
+    }).catch(() => {
+        window.alert("Afvisningen kunne ikke gemmes. Prøv igen.")
     })
     }
 
