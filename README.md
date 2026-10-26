@@ -1,5 +1,5 @@
 # attest-webinterface
-[**Formål**](#formål) | [**Beskrivelse**](#beskrivelse) | [**Dataflow**](#dataflow) | [**Features**](#features) | [**Login og adgang**](#login-og-adgang) | [**Afhængigheder**](#afh%C3%A6ngigheder) | [**API**](#api) | [**Udvikling**](#udvikling)
+[**Formål**](#formål) | [**Beskrivelse**](#beskrivelse) | [**Features**](#features) | [**Afhængigheder**](#afh%C3%A6ngigheder) | [**Udvikling**](#udvikling)
 
 # Formål
 
@@ -18,7 +18,7 @@ Handlingerne opdaterer bestillingens status og opretter en hændelse i databasen
 
 Interfacet viser også historik over bestilte og færdigbehandlede bestillinger.
 
-## Dataflow
+### Dataflow
 ```mermaid
 sequenceDiagram
     participant UI as Vue-webinterface
@@ -50,7 +50,7 @@ Webinterfacet taler kun med Flask-API'et. Ved **læsning** henter API'et bestill
 - Viser historik over bestilte og færdigbehandlede bestillinger
 - Udbyder et healthcheck-endpoint til overvågning
 
-## Login og adgang
+### Login og adgang
 
 Brugere logger ind via Keycloak (OpenID Connect). Kun brugere med klientrollen `attest-admin` på Keycloak-klienten (`KEYCLOAK_CLIENT_ID`) får adgang
 
@@ -74,7 +74,9 @@ Applikationen kræver adgang til en PostgreSQL-database
 Databasen skal indeholde de tabeller og felter, som backendens forespørgsler bruger:
 `attestation_order`, `attestation_request` og `order_event`.
 
-Ved hver handling oprettes en hændelse i `order_event` med brugerens e-mail (`actor`). Ved afvisning gemmes også `rejection_reason` og `rejection_description`.
+Historik-endpoints returnerer personoplysninger, herunder rekvirentens navn, email og DQ-nummer og CPR-nummeret på den person bestillingen vedrører. Oplysningerne bruges til at administrere og følge op på attestbestillinger. Adgang kræver login og rollen `attest-admin`.
+
+Når en bestilling markeres som bestilt eller afvises, oprettes en hændelse i `order_event` med brugerens email (`actor`). Ved afvisning gemmes også `rejection_reason` og `rejection_description`. Der oprettes kun en hændelse, når statusændringen gennemføres. 
 
 ### Teknologier
 - [Flask](https://flask.palletsprojects.com/) - backend og API
@@ -100,7 +102,7 @@ Ved hver handling oprettes en hændelse i `order_event` med brugerens e-mail (`a
 Lokalt kan variablerne sættes i en `.env`-fil (se [.env.example](.env.example)). Filen ignoreres af git.
 Hemmelige værdier og adgangsoplysninger må ikke gemmes i kildekoden eller versionsstyres
 
-## API 
+### API 
 
 Backendens API bruger præfikset `/api`.
 
@@ -115,11 +117,11 @@ Backendens API bruger præfikset `/api`.
 | `GET` | `/api/orders/<attest_type>/<sub_type>` | Henter ventende bestillinger for en attesttype og subtype. Brug `null` som undertype hvis den ikke er angivet. |
 | `GET` | `/api/ordercount` | Henter antal ventende bestillinger fordelt på attesttype og subtype |
 | `GET` | `/api/history/ordered` | Henter bestillinger, der er markeret som bestilt. |
-| `GET` | `/api/history/completed` | henter færdigbehandlede bestillinger. |
+| `GET` | `/api/history/completed` | Henter op til 1000 bestillinger med status under behandling, journaliseret, sendt til rekvirent, modtaget eller afvist |
 | `POST` | `/api/rejectorder/<order_id>` | Afviser en ventende bestilling. |
 | `POST` | `/api/processorders` | Markerer en liste af ventende bestillinger som bestilt. |
 
-Kald uden gyldig session svarer `401 Not authenticated`.
+Beskyttede API-endpoints kræver en gyldig session og svarer eller `401 Not authenticated`. Login-, callback-, healthcheck- og metrics-endpoints er undtaget.
 
 `POST /api/processorders` forventer en JSON-liste med bestillings-id'er:
 ```json
