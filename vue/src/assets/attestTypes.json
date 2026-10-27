@@ -1,0 +1,65 @@
+[
+    {
+        "name": "Offentlig straffeattest",
+        "description": "Ansættelse i sociale servicefag",
+        "longDescription": "Personer der søger ansættelse eller er ansat til at yde indsats i hendhold til §§ 83 og 85 i lov om social service, samt for personer der søger ansættelse eller er ansat ved tilbud, hvor der ydes en sådan indsats.",
+        "url": "https://dsa.politi.dk/RequestPublic?style=PolitiDK",
+        "typeId": 0,
+        "subTypeId": 0,
+        "count": 0
+    },
+    {
+        "name": "Offentlig straffeattest",
+        "description": "Ansættelse i folkeskolen",
+        "longDescription": "Personer der søger ansættelse i folkeskolen, og som led i ansættelsen har direkte kontakt med elever.",
+        "url": "https://dsa.politi.dk/RequestPublic?style=PolitiDK",
+        "typeId": 0,
+        "subTypeId": 1,
+        "count": 0
+    },
+    {
+        "name": "Offentlig straffeattest",
+        "description": "Ansættelse som personlig hjælper",
+        "longDescription": "Personer der i medfør af lov om social service §§ 52, 54, 74 skal virke som personlig rådgiver, fast kontakt- eller støtteperson.",
+        "url": "https://dsa.politi.dk/RequestPublic?style=PolitiDK",
+        "typeId": 0,
+        "subTypeId": 2,
+        "count": 0
+    },
+    {
+        "name": "Offentlig straffeattest",
+        "description": "Ansættelse ved dagtilbud for børn/unge",
+        "url": "https://dsa.politi.dk/RequestPublic?style=PolitiDK",
+        "longDescription": "Personer der søger ansættelse ved dag/døgn/rådgivningstilbud for børn og unge.",
+        "typeId": 0,
+        "subTypeId": 3,
+        "count": 0
+    },
+    {
+        "name": "Privat straffeattest",
+        "description": "",
+        "longDescription": "",
+        "url": "https://dsa.politi.dk/RequestPrivateThirdParty?style=PolitiDK",
+        "typeId": 1,
+        "subTypeId": null,
+        "count": 0
+    },
+    {
+        "name": "Børneattest",
+        "description": "Ansættelse i børnefagligt område",
+        "longDescription": "Personer, der som led i ansættelsen eller beskæftigelsen har direkte kontakt med børn under 15 år, eller der som led i ansættelsen eller beskæftigelsen, færdes fast blandt børn under 15 år og derved har mulighed for at opnå direkte kotakt med disse.",
+        "url": "https://dsa.politi.dk/RequestChild?style=PolitiDK",
+        "typeId": 2,
+        "subTypeId": 0,
+        "count": 0
+    },
+    {
+        "name": "Børneattest",
+        "description": "Pårørende til ansat i børnefagligt område",
+        "longDescription": "Pågældende personers ægtefæller, samlevere eller andre, hvis de har mulighed for via ansættelsen eller beskæftigelsen at opnå direkte kontakt med børn under 15 år.",
+        "url": "https://dsa.politi.dk/RequestChild?style=PolitiDK",
+        "typeId": 2,
+        "subTypeId": 1,
+        "count": 0
+    }
+]
