@@ -4,7 +4,7 @@ API endpoints for the Flask application.
 import logging
 from flask import Blueprint, jsonify, request, session
 
-from backend.src.order_repository import (
+from order_repository import (
     get_pending_orders,
     get_all_pending_orders,
     get_pending_order_counts,
@@ -165,7 +165,7 @@ def reject_order_endpoint(order_id: str) -> tuple[dict, int]:
             actor=actor,
             reason=reason,
             description=description,
-            )
+        )
         return jsonify({"success": success}), 200
     except DataBaseError as error:
         logger.error("Failed to reject order: %s", error)

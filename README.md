@@ -200,7 +200,7 @@ $env:FLASK_ENV = "dev"
 $env:DISABLE_KEYCLOAK = "true"
 $env:PYTHONPATH = "$PWD;$PWD\backend\src"
 
-python -m backend.src.main
+python -m src.main
 ```
 
 Bemærk:

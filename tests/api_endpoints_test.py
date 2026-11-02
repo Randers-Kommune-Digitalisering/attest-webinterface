@@ -4,8 +4,8 @@ from unittest.mock import patch
 import pytest
 from flask.testing import FlaskClient
 
-from backend.src.api_endpoints import REJECTION_DESCRIPTIONS
-from backend.src.order_repository import DataBaseError
+from api_endpoints import REJECTION_DESCRIPTIONS
+from order_repository import DataBaseError
 
 
 def test_status_returns_success(client: FlaskClient) -> None:
@@ -32,7 +32,7 @@ def test_read_endpoints_return_repository_rows(
     rows = [{"id": "order-1"}]
 
     with patch(
-        f"backend.src.api_endpoints.{mock_target}",
+        f"api_endpoints.{mock_target}",
         return_value=rows,
     ) as repository_call:
         response = client.get(endpoint)
@@ -48,7 +48,7 @@ def test_get_orders_converts_null_subtype_to_none(
     rows = [{"id": "order-1"}]
 
     with patch(
-        "backend.src.api_endpoints.get_pending_orders",
+        "api_endpoints.get_pending_orders",
         return_value=rows,
     ) as repository_call:
         response = client.get("/api/orders/2/null")
@@ -62,7 +62,7 @@ def test_get_orders_converts_numeric_subtype(
         client: FlaskClient,
 ) -> None:
     with patch(
-        "backend.src.api_endpoints.get_pending_orders",
+        "api_endpoints.get_pending_orders",
         return_value=[],
     ) as repository_call:
         response = client.get("/api/orders/2/3")
@@ -75,7 +75,7 @@ def test_get_orders_rejects_invalid_subtype(
         client: FlaskClient,
 ) -> None:
     with patch(
-        "backend.src.api_endpoints.get_pending_orders",
+        "api_endpoints.get_pending_orders",
     ) as repository_call:
         response = client.get("/api/orders/2/invalid")
 
@@ -102,7 +102,7 @@ def test_process_orders_rejects_invalid_payload(
     payload: object,
 ) -> None:
     with patch(
-        "backend.src.api_endpoints.mark_orders_as_ordered",
+        "api_endpoints.mark_orders_as_ordered",
     ) as repository_call:
         response = client.post("/api/processorders", json=payload)
 
@@ -118,7 +118,7 @@ def test_process_orders_marks_orders_with_actor_email(
     client: FlaskClient,
 ) -> None:
     with patch(
-        "backend.src.api_endpoints.mark_orders_as_ordered",
+        "api_endpoints.mark_orders_as_ordered",
         return_value=2,
     ) as repository_call:
         response = client.post(
@@ -159,7 +159,7 @@ def test_reject_order_rejects_invalid_payload(
     expected_error: str,
 ) -> None:
     with patch(
-        "backend.src.api_endpoints.reject_order",
+        "api_endpoints.reject_order",
     ) as repository_call:
         response = client.post(
             "/api/rejectorder/order-1",
@@ -178,7 +178,7 @@ def test_reject_order_trims_custom_description(
         client: FlaskClient,
 ) -> None:
     with patch(
-        "backend.src.api_endpoints.reject_order",
+        "api_endpoints.reject_order",
         return_value=True,
     ) as repository_call:
         response = client.post(
@@ -208,7 +208,7 @@ def test_reject_order_uses_standard_description(
     reason: str,
 ) -> None:
     with patch(
-        "backend.src.api_endpoints.reject_order",
+        "api_endpoints.reject_order",
         return_value=True,
     ) as repository_call:
         response = client.post(
@@ -229,7 +229,7 @@ def test_database_error_returns_server_error(
     client: FlaskClient,
 ) -> None:
     with patch(
-        "backend.src.api_endpoints.get_all_pending_orders",
+        "api_endpoints.get_all_pending_orders",
         side_effect=DataBaseError("Database unavailable"),
     ):
         response = client.get("/api/orders")
@@ -260,7 +260,7 @@ def test_endpoints_return_server_error_on_database_error(
     payload: object,
 ) -> None:
     with patch(
-        f"backend.src.api_endpoints.{mock_target}",
+        f"api_endpoints.{mock_target}",
         side_effect=DataBaseError("Database unavailable"),
     ):
         response = getattr(client, method)(endpoint, json=payload)
@@ -288,7 +288,7 @@ def test_write_endpoints_require_actor_email(
     with client.session_transaction() as session:
         session["user"] = {}
 
-    with patch(f"backend.src.api_endpoints.{mock_target}") as repository_call:
+    with patch(f"api_endpoints.{mock_target}") as repository_call:
         response = client.post(endpoint, json=payload)
 
     assert response.status_code == 401

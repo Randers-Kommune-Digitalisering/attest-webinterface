@@ -4,8 +4,8 @@ import pytest
 from flask import Flask
 from flask.testing import FlaskClient
 
-from backend.src.main import create_app
-from backend.src.utils.config import DevConfig
+from main import create_app
+from utils.config import DevConfig
 
 
 class TestConfig(DevConfig):
