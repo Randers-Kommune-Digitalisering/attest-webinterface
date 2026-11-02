@@ -3,5 +3,7 @@ python-dotenv>=1.0.0
 gunicorn>=21.2.0
 prometheus_client>=0.25.0
 psycopg[binary]>=3.1.0
+SQLAlchemy>=2.0
+attest-data-model @ git+https://github.com/Randers-Kommune-Digitalisering/attest-data-model.git@45559a4388132b01f384ebf60e8d72d610962741
 Authlib>=1.3.0
 requests>=2.31.0

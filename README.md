@@ -74,6 +74,21 @@ Applikationen kræver adgang til en PostgreSQL-database
 Databasen skal indeholde de tabeller og felter, som backendens forespørgsler bruger:
 `attestation_order`, `attestation_request` og `order_event`.
 
+Backendens forespørgsler bruger SQLAlchemy-modellerne fra den fælles
+`attest-data-model`-pakke og PostgreSQL-driveren psycopg. Pakken er fastlåst
+til et gennemgået commit i [requirements.txt](requirements.txt); opgradér kun
+til et nyt commit, når ændringen er testet. Forbindelsen konfigureres med de fem
+`ATTEST_DB_*`-miljøvariabler, som vist i [.env.example](.env.example). Backend
+konstruerer forbindelsen sikkert fra de enkelte værdier, så tegn i adgangskoden
+ikke skal URL-kodes manuelt. Modellerne opretter ikke tabeller automatisk.
+Skemaet skal derfor være klar, inden applikationen startes.
+Modellen skal indeholde `requester_email` på `attestation_request` samt
+`rejection_reason` og `rejection_description` på `order_event`, da disse felter
+bruges af webinterfacet.
+
+Den anden applikation skal bruge samme gennemgåede pakkeversion og databaseskema.
+Ændringer af skemaet skal styres særskilt fra modellen.
+
 Historik-endpoints returnerer personoplysninger, herunder rekvirentens navn, email og DQ-nummer og CPR-nummeret på den person bestillingen vedrører. Oplysningerne bruges til at administrere og følge op på attestbestillinger. Adgang kræver login og rollen `attest-admin`.
 
 Når en bestilling markeres som bestilt eller afvises, oprettes en hændelse i `order_event` med brugerens email (`actor`). Ved afvisning gemmes også `rejection_reason` og `rejection_description`. Der oprettes kun en hændelse, når statusændringen gennemføres. 
@@ -82,12 +97,17 @@ Når en bestilling markeres som bestilt eller afvises, oprettes en hændelse i `
 - [Flask](https://flask.palletsprojects.com/) - backend og API
 - [Vue](https://vuejs.org/) og [vite](https://vite.dev/) - brugergrænseflade
 - [PostgreSQL](https://www.postgresql.org/) - lagring af bestillinger og hændelser
+- [SQLAlchemy](https://www.sqlalchemy.org/) - databaseforespørgsler og fælles datamodel
 - [Keycloak](https://www.keycloak.org/) og [AuthLib](https://docs.authlib.org/) - login via OpenID Connect
 
 ### Miljøvariabler
 | Variabel | Påkrævet | Beskrivelse |
 |---|---:|---|
-| `DATABASE_URL` | Ja | Forbindelsesstreng til PostgreSQL-databasen. |
+| `ATTEST_DB_HOST` | Ja | PostgreSQL-serverens værtsnavn eller IP-adresse. |
+| `ATTEST_DB_PORT` | Ja | PostgreSQL-serverens port. |
+| `ATTEST_DB_NAME` | Ja | Navnet på databasen. |
+| `ATTEST_DB_USERNAME` | Ja | Databasebrugeren. |
+| `ATTEST_DB_PASSWORD` | Ja | Databasebrugerens adgangskode. |
 | `FLASK_ENV` | Nej | Flask-konfiguration: `dev` eller `prod`. Standard er `dev`. |
 | `PORT` | Nej | Backendens port. Standard er `8080`. |
 | `DEBUG` | Nej | Aktiverer debug-logning. Standard afhænger af `FLASK_ENV`. |
@@ -194,7 +214,11 @@ py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt -r requirements-dev.txt
 
-$env:DATABASE_URL = "postgresql://attest:kun_til_lokal_test@127.0.0.1:5433/attest_local"
+$env:ATTEST_DB_HOST = "127.0.0.1"
+$env:ATTEST_DB_PORT = "5433"
+$env:ATTEST_DB_NAME = "attest_local"
+$env:ATTEST_DB_USERNAME = "attest"
+$env:ATTEST_DB_PASSWORD = "kun_til_lokal_test"
 $env:PORT = "1880"
 $env:FLASK_ENV = "dev"
 $env:DISABLE_KEYCLOAK = "true"
