@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from backend.src.utils import logging as app_logging
+from utils import logging as app_logging
 
 
 def test_set_logging_configuration_ignores_errors_from_werzeug_patch() -> None:

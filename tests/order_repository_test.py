@@ -3,7 +3,7 @@ from unittest.mock import MagicMock as Mock
 import psycopg
 import pytest
 
-from backend.src import order_repository
+import order_repository
 
 
 @pytest.fixture

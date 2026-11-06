@@ -1,6 +1,6 @@
 import pytest
 
-from backend.src.utils.config import get_config_class_path
+from utils.config import get_config_class_path
 
 
 @pytest.mark.parametrize(

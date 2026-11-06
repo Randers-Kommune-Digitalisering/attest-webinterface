@@ -6,8 +6,8 @@ import pytest
 from flask import Flask, redirect
 from flask.testing import FlaskClient
 
-from backend.src.main import REQUIRED_ROLE, create_app, _minimal_userinfo
-from backend.src.utils.config import DevConfig, ProdConfig
+from main import REQUIRED_ROLE, create_app, _minimal_userinfo
+from utils.config import DevConfig, ProdConfig
 
 
 class DummyAuthNotAllowedConfig(ProdConfig):
@@ -70,7 +70,7 @@ def test_minimal_userinfo_ignores_invalid_roles() -> None:
 
 @pytest.fixture()
 def keycloak_app() -> tuple[Flask, MagicMock]:
-    with patch("backend.src.main.OAuth") as oauth_class:
+    with patch("main.OAuth") as oauth_class:
         app = create_app(config_object=KeycloakConfig)
 
     app.config["TESTING"] = True

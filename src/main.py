@@ -3,9 +3,9 @@ Main entry point for the Flask application.
 """
 from authlib.integrations.flask_client import OAuth
 from flask import Flask, Response, jsonify, redirect, request, session, url_for
-from backend.src.utils.config import get_config_class_path
-from backend.src.api_endpoints import api
-from backend.src.utils.logging import error_counter, set_logging_configuration
+from utils.config import get_config_class_path
+from api_endpoints import api
+from utils.logging import error_counter, set_logging_configuration
 
 REQUIRED_ROLE = "attest-admin"
 PUBLIC_PATHS = {"/api/login", "/api/auth", "/healthz", "/metrics"}
