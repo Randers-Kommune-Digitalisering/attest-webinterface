@@ -1,258 +1,233 @@
 """Database queries and operations for attestation orders."""
 
 import os
+from functools import lru_cache
 
-import psycopg
-from psycopg.rows import dict_row
+from attest_data_model import (AttestationOrder, AttestationRequest,
+                               OrderEvent, OrderStatus)
+from sqlalchemy import Select, create_engine, func, select, update
+from sqlalchemy.engine import Engine
+from sqlalchemy.engine.url import URL
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 
 class DataBaseError(Exception):
-    """Custom exception for database-related errors."""
-    pass
+    """Error accessing attestation orders."""
+
+
+@lru_cache(maxsize=1)
+def _engine() -> Engine:
+    required_variables = (
+        "ATTEST_DB_HOST",
+        "ATTEST_DB_PORT",
+        "ATTEST_DB_NAME",
+        "ATTEST_DB_USERNAME",
+        "ATTEST_DB_PASSWORD",
+    )
+    missing_variables = [
+        variable for variable in required_variables if not os.environ.get(variable)
+    ]
+    if missing_variables:
+        missing = ", ".join(missing_variables)
+        raise DataBaseError(f"Missing database configuration: {missing}")
+
+    try:
+        url = URL.create(
+            "postgresql+psycopg",
+            username=os.environ["ATTEST_DB_USERNAME"],
+            password=os.environ["ATTEST_DB_PASSWORD"],
+            host=os.environ["ATTEST_DB_HOST"],
+            port=int(os.environ["ATTEST_DB_PORT"]),
+            database=os.environ["ATTEST_DB_NAME"],
+        )
+    except ValueError as error:
+        raise DataBaseError("ATTEST_DB_PORT must be a valid port number") from error
+
+    return create_engine(url)
+
+
+def _order_columns() -> tuple:
+    return (
+        AttestationOrder.order_id.label("orderId"),
+        AttestationRequest.requested_at.label("requestedAt"),
+        AttestationRequest.requester_name.label("requesterName"),
+        AttestationRequest.requester_email.label("requesterEmail"),
+        AttestationRequest.requester_dq.label("requesterDq"),
+        AttestationRequest.subject_cpr.label("cpr"),
+    )
 
 
 def get_all_pending_orders() -> list[dict]:
-    """
-    Fetch all pending attestation orders from the database.
-
-    Return: List of dictionaries representing pending orders.
-    """
-    query = """
-        SELECT
-            o.order_id AS "orderId",
-            r.requested_at AS "requestedAt",
-            r.requester_name AS "requesterName",
-            r.requester_email AS "requesterEmail",
-            r.requester_dq AS "requesterDq",
-            r.subject_cpr AS "cpr"
-        FROM attestation_order o
-        JOIN attestation_request r ON r.request_id = o.request_id
-        WHERE o.status = 'pending_order'
-        ORDER BY r.requested_at DESC, r.requester_dq
-    """
-
-    try:
-        with psycopg.connect(
-            os.environ["DATABASE_URL"],
-            row_factory=dict_row,
-        ) as connection, connection.cursor() as cursor:
-            cursor.execute(query)
-            return cursor.fetchall()
-    except psycopg.Error as error:
-        raise DataBaseError("Couldn't fetch all pending orders") from error
+    """Fetch all pending orders, newest requests first."""
+    statement = (
+        select(*_order_columns())
+        .join(AttestationOrder.request)
+        .where(AttestationOrder.status == OrderStatus.PENDING_ORDER)
+        .order_by(
+            AttestationRequest.requested_at.desc(),
+            AttestationRequest.requester_dq,
+        )
+    )
+    return _fetch(statement, "Couldn't fetch all pending orders")
 
 
 def get_pending_orders(attest_type: int, sub_type: int | None) -> list[dict]:
-    """
-    Fetch pending attestation orders for a specific attestation type and subtype.
-
-    Param: attest_type: int: The attestation type.
-    Param: sub_type: int | None: The attestation subtype. Can be None if not specified.
-    Return: List of dictionaries representing pending orders.
-    """
-    query = """
-        SELECT
-            o.order_id AS "orderId",
-            r.requested_at AS "requestedAt",
-            r.requester_name AS "requesterName",
-            r.requester_email AS "requesterEmail",
-            r.requester_dq AS "requesterDq",
-            r.subject_cpr AS "cpr"
-        FROM attestation_order o
-        JOIN attestation_request r ON r.request_id = o.request_id
-        WHERE o.status = 'pending_order'
-            AND o.attest_type = %s
-            AND o.attest_subtype IS NOT DISTINCT FROM %s
-        ORDER BY r.requested_at DESC, r.requester_dq
-    """
-
-    try:
-        with psycopg.connect(
-            os.environ["DATABASE_URL"],
-            row_factory=dict_row,
-        ) as connection, connection.cursor() as cursor:
-            cursor.execute(query, (attest_type, sub_type))
-            return cursor.fetchall()
-    except psycopg.Error as error:
-        raise DataBaseError("couldn't fetch pending orders") from error
+    """Fetch pending orders matching an attestation type and nullable subtype."""
+    statement = (
+        select(*_order_columns())
+        .join(AttestationOrder.request)
+        .where(
+            AttestationOrder.status == OrderStatus.PENDING_ORDER,
+            AttestationOrder.attest_type == attest_type,
+            AttestationOrder.attest_subtype == sub_type,
+        )
+        .order_by(
+            AttestationRequest.requested_at.desc(),
+            AttestationRequest.requester_dq,
+        )
+    )
+    return _fetch(statement, "Couldn't fetch pending orders")
 
 
 def get_pending_order_counts() -> list[dict]:
-    """
-    Fetch counts of all pending attestation orders grouped by attestation type and subtype.
-
-    Return: List of dictionaries representing pending order counts.
-    """
-    query = """
-        SELECT
-            attest_type AS "attestType",
-            attest_subtype AS "attestSubType",
-            COUNT(*) AS "count"
-        FROM attestation_order
-        WHERE status = 'pending_order'
-        GROUP BY attest_type, attest_subtype
-    """
-
-    try:
-        with psycopg.connect(
-            os.environ["DATABASE_URL"],
-            row_factory=dict_row,
-        ) as connection, connection.cursor() as cursor:
-            cursor.execute(query)
-            return cursor.fetchall()
-    except psycopg.Error as error:
-        raise DataBaseError("couldn't fetch pending order counts") from error
+    """Count pending orders by attestation type and subtype."""
+    statement = (
+        select(
+            AttestationOrder.attest_type.label("attestType"),
+            AttestationOrder.attest_subtype.label("attestSubType"),
+            func.count().label("count"),
+        )
+        .where(AttestationOrder.status == OrderStatus.PENDING_ORDER)
+        .group_by(AttestationOrder.attest_type, AttestationOrder.attest_subtype)
+    )
+    return _fetch(statement, "Couldn't fetch pending order counts")
 
 
 def get_ordered_history() -> list[dict]:
-    """
-    Fetch the history of ordered attestation orders.
-
-    Return: List of dictionaries representing ordered history.
-    """
-    query = """
-        SELECT
-            r.requested_at AS "requestedAt",
-            r.requester_name AS "requesterName",
-            r.requester_email AS "requesterEmail",
-            r.requester_dq AS "requesterDq",
-            r.subject_cpr AS "cpr",
-            o.attest_type AS "attestType",
-            o.attest_subtype AS "attestSubType",
-            o.ordered_at AS "orderedAt"
-        FROM attestation_order o
-        JOIN attestation_request r ON r.request_id = o.request_id
-        WHERE o.status = 'ordered'
-        ORDER BY
-            r.requested_at DESC,
-            o.attest_type,
-            o.attest_subtype,
-            r.requester_dq
-    """
-
-    try:
-        with psycopg.connect(
-            os.environ["DATABASE_URL"],
-            row_factory=dict_row,
-        ) as connection, connection.cursor() as cursor:
-            cursor.execute(query)
-            return cursor.fetchall()
-    except psycopg.Error as error:
-        raise DataBaseError("couldn't fetch ordered history") from error
+    """Fetch orders currently marked as ordered."""
+    statement = (
+        select(
+            *_order_columns()[1:],
+            AttestationOrder.attest_type.label("attestType"),
+            AttestationOrder.attest_subtype.label("attestSubType"),
+            AttestationOrder.ordered_at.label("orderedAt"),
+        )
+        .select_from(AttestationOrder)
+        .join(AttestationOrder.request)
+        .where(AttestationOrder.status == OrderStatus.ORDERED)
+        .order_by(
+            AttestationRequest.requested_at.desc(),
+            AttestationOrder.attest_type,
+            AttestationOrder.attest_subtype,
+            AttestationRequest.requester_dq,
+        )
+    )
+    return _fetch(statement, "Couldn't fetch ordered history")
 
 
 def get_completed_history() -> list[dict]:
-    """
-    Fetch the history of completed attestation orders.
-
-    Return: List of dictionaries representing completed history.
-    """
-    query = """
-        SELECT
-            r.requested_at AS "requestedAt",
-            r.requester_name AS "requesterName",
-            r.requester_email AS "requesterEmail",
-            r.requester_dq AS "requesterDq",
-            r.subject_cpr AS "cpr",
-            o.attest_type AS "attestType",
-            o.attest_subtype AS "attestSubType",
-            o.status AS "status",
-            event.occurred_at AS "processedAt"
-        FROM attestation_order o
-        JOIN attestation_request r ON r.request_id = o.request_id
-        LEFT JOIN LATERAL (
-                    SELECT e.occurred_at
-                    FROM order_event e
-                    WHERE e.order_id = o.order_id
-                        AND e.status = o.status
-                    ORDER BY e.occurred_at DESC, e.event_id DESC
-                    LIMIT 1
-                    ) event ON true
-        WHERE o.status IN (
-            'under_review',
-            'journalized',
-            'sent_to_requester',
-            'received',
-            'rejected'
+    """Fetch up to 1000 completed orders with their latest current-status event."""
+    latest_event = (
+        select(OrderEvent.occurred_at)
+        .where(
+            OrderEvent.order_id == AttestationOrder.order_id,
+            OrderEvent.status == AttestationOrder.status,
         )
-        ORDER BY
-            event.occurred_at DESC NULLS LAST,
-            r.requested_at DESC
-        LIMIT 1000
-    """
+        .order_by(OrderEvent.occurred_at.desc(), OrderEvent.event_id.desc())
+        .limit(1)
+        .correlate(AttestationOrder)
+        .scalar_subquery()
+    )
+    statement = (
+        select(
+            *_order_columns()[1:],
+            AttestationOrder.attest_type.label("attestType"),
+            AttestationOrder.attest_subtype.label("attestSubType"),
+            AttestationOrder.status.label("status"),
+            latest_event.label("processedAt"),
+        )
+        .select_from(AttestationOrder)
+        .join(AttestationOrder.request)
+        .where(
+            AttestationOrder.status.in_(
+                (
+                    OrderStatus.UNDER_REVIEW,
+                    OrderStatus.JOURNALIZED,
+                    OrderStatus.SENT_TO_REQUESTER,
+                    OrderStatus.RECEIVED,
+                    OrderStatus.REJECTED,
+                ),
+            ),
+        )
+        .order_by(
+            latest_event.desc().nulls_last(),
+            AttestationRequest.requested_at.desc(),
+        )
+        .limit(1000)
+    )
+    rows = _fetch(statement, "Couldn't fetch completed history")
+    for row in rows:
+        row["status"] = row["status"].value
 
-    try:
-        with psycopg.connect(
-            os.environ["DATABASE_URL"],
-            row_factory=dict_row,
-        ) as connection, connection.cursor() as cursor:
-            cursor.execute(query)
-            return cursor.fetchall()
-    except psycopg.Error as error:
-        raise DataBaseError("couldn't fetch completed history") from error
+    return rows
 
 
 def mark_orders_as_ordered(order_ids: list[str], actor: str) -> int:
-    """
-    Mark specified pending orders as 'ordered' and record an audit event in a single transaction.
-
-    Param: order_ids: list[str]: The attestation_order.order_id values to update.
-    Param: actor: str: Email of the user performing the action.
-    Return: The number of orders that were updated.
-    """
-    query = """
-        WITH updated_orders AS (
-            UPDATE attestation_order
-            SET status = 'ordered', ordered_at = now()
-            WHERE order_id = ANY(%s)
-                AND status = 'pending_order'
-            RETURNING order_id
-        )
-        INSERT INTO order_event (order_id, status, actor)
-        SELECT order_id, 'ordered', %s
-        FROM updated_orders
-        RETURNING order_id
-    """
-
+    """Mark pending orders ordered and add one event per changed order atomically."""
     try:
-        with psycopg.connect(os.environ["DATABASE_URL"]) as connection, connection.cursor() as cursor:
-            cursor.execute(query, (order_ids, actor))
-            return len(cursor.fetchall())
-    except psycopg.Error as error:
-        raise DataBaseError("couldn't mark orders as ordered") from error
+        with Session(_engine()) as session, session.begin():
+            changed_ids = session.scalars(
+                update(AttestationOrder)
+                .where(
+                    AttestationOrder.order_id.in_(order_ids),
+                    AttestationOrder.status == OrderStatus.PENDING_ORDER,
+                )
+                .values(status=OrderStatus.ORDERED, ordered_at=func.now())
+                .returning(AttestationOrder.order_id),
+            ).all()
+            session.add_all(
+                OrderEvent(order_id=order_id, status=OrderStatus.ORDERED, actor=actor)
+                for order_id in changed_ids
+            )
+            return len(changed_ids)
+    except SQLAlchemyError as error:
+        raise DataBaseError("Couldn't mark orders as ordered") from error
 
 
 def reject_order(order_id: str, actor: str, reason: str, description: str) -> bool:
-    """
-    Reject a pending order and record an audit event.
-
-    Param: order_id: str: The attestation_order.order_id to reject.
-    Param: actor: str: Email of the user performing the action.
-    Param: reason: str: The reason for rejection.
-    Param: description: str: Detailed description of the rejection.
-    Return: True if the order was successfully rejected, False otherwise.
-    """
-    query = """
-        UPDATE attestation_order
-        SET status = 'rejected'
-        WHERE order_id = %s
-        AND status = 'pending_order'
-    """
-    insert_event_query = """
-        INSERT INTO order_event (order_id, status, actor, rejection_reason, rejection_description)
-        VALUES(%s, 'rejected', %s, %s, %s)
-"""
-
+    """Reject a pending order and record its reason in the same transaction."""
     try:
-        with psycopg.connect(
-            os.environ["DATABASE_URL"],
-            row_factory=dict_row,
-        ) as connection, connection.cursor() as cursor:
-            cursor.execute(query, (order_id,))
-            if cursor.rowcount == 0:
+        with Session(_engine()) as session, session.begin():
+            changed_id = session.scalar(
+                update(AttestationOrder)
+                .where(
+                    AttestationOrder.order_id == order_id,
+                    AttestationOrder.status == OrderStatus.PENDING_ORDER,
+                )
+                .values(status=OrderStatus.REJECTED)
+                .returning(AttestationOrder.order_id),
+            )
+            if changed_id is None:
                 return False
 
-            cursor.execute(insert_event_query, (order_id, actor, reason, description))
+            session.add(
+                OrderEvent(
+                    order_id=changed_id,
+                    status=OrderStatus.REJECTED,
+                    actor=actor,
+                    rejection_reason=reason,
+                    rejection_description=description,
+                ),
+            )
             return True
-    except psycopg.Error as error:
-        raise DataBaseError("couldn't reject order") from error
+    except SQLAlchemyError as error:
+        raise DataBaseError("Couldn't reject order") from error
+
+
+def _fetch(statement: Select, message: str) -> list[dict]:
+    try:
+        with Session(_engine()) as session:
+            return [dict(row) for row in session.execute(statement).mappings()]
+    except SQLAlchemyError as error:
+        raise DataBaseError(message) from error
