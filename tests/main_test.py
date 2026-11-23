@@ -1,5 +1,6 @@
 """Tests for application-level endpoints in main."""
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -120,6 +121,27 @@ def test_keycloak_allows_public_paths(keycloak_app: tuple[Flask, MagicMock]) -> 
     app, _ = keycloak_app
 
     assert app.test_client().get("/healthz").status_code == 200
+
+
+def test_frontend_served_without_login(
+    keycloak_app: tuple[Flask, MagicMock],
+    tmp_path: Path,
+) -> None:
+    app, _ = keycloak_app
+    app.static_folder = str(tmp_path)
+    (tmp_path / "index.html").write_text("<html>Vue app</html>", encoding="utf-8")
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "app.js").write_text("Vue asset", encoding="utf-8")
+
+    client = app.test_client()
+    for route in ("/", "/vue", "/templates", "/orders", "/history"):
+        response = client.get(route)
+        assert response.status_code == 200
+        assert b"Vue app" in response.data
+
+    assert client.get("/assets/app.js").data == b"Vue asset"
+    assert client.get("/assets/missing.js").status_code == 404
+    assert client.get("/api/orders").status_code == 401
 
 
 def test_login_redirects_to_keycloak(keycloak_app: tuple[Flask, MagicMock]) -> None:

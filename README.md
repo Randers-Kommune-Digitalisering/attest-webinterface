@@ -40,6 +40,10 @@ sequenceDiagram
 
 Webinterfacet taler kun med Flask-API'et. Ved **læsning** henter API'et bestillinger og historik fra databasen og returnerer dem som JSON. Ved **opdatering** ændrer API'et bestillingens status og registrerer handlingen som en hændelse i `order_event`
 
+I produktion bygger Docker Vue til statiske filer, som Flask serverer sammen med
+API'et fra samme adresse. Frontenden kalder `/api` direkte; der bruges ingen
+separat frontend-server eller proxy i produktion.
+
 
 ## Features
 
@@ -170,6 +174,20 @@ Notering af eventuelle hard-codede værdier, og hvordan værdierne kan ændres.
 
 Løsningen kan køres lokalt med tre dele: en PostgreSQL-database i Docker, 
 Flask-backend og Vue-frontend. Hver del køres i sin egen powershell-terminal.
+
+Til lokal udvikling: udfyld `.env` med lokale databaseindstillinger (se
+[.env.example](.env.example)), og sæt `DISABLE_KEYCLOAK=true` for at bruge
+testbrugeren. Start derefter `docker compose up --build` fra projektroden.
+Vue/Vite åbnes på `http://localhost:5173`, og Flask er tilgængelig på
+`http://localhost:1880`. Vite videresender `/api` til Flask i Compose-netværket.
+Frontend-koden opdateres automatisk, og Gunicorn genindlæser backend-kode ved
+ændringer. Brug kun opdigtede testdata i den lokale database.
+
+Til produktion: byg billedet med `docker build -t attest-webinterface .`.
+Produktionsbilledet indeholder den byggede Vue-frontend og Flask-API'et på
+samme adresse (standardport `8080`). Sæt database-, Keycloak- og
+`SECRET_KEY`-miljøvariablerne beskrevet ovenfor ved kørsel. Brug ikke
+`DISABLE_KEYCLOAK=true` i produktion.
 
 **Brug kun opdigtede testdata.** Indsæt aldrig produktionsdata eller ægte CPR-numre i den lokale database.
 
