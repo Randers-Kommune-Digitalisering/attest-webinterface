@@ -146,7 +146,7 @@ def reject_order_endpoint(order_id: str) -> tuple[dict, int]:
     reason = payload.get("reason")
     description = payload.get("description")
 
-    if reason not in {"incorrect", "duplicate", "other"}:
+    if not isinstance(reason, str) or reason not in {"incorrect", "duplicate", "other"}:
         return jsonify({"success": False, "error": "Invalid rejection reason"}), 400
 
     if reason == "other":

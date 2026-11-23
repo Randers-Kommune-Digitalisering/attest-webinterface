@@ -240,7 +240,7 @@ $env:ATTEST_DB_PASSWORD = "kun_til_lokal_test"
 $env:PORT = "1880"
 $env:FLASK_ENV = "dev"
 $env:DISABLE_KEYCLOAK = "true"
-$env:PYTHONPATH = "$PWD;$PWD\backend\src"
+$env:PYTHONPATH = "$PWD;$PWD\src"
 
 python -m src.main
 ```
