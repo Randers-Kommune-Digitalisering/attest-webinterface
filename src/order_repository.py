@@ -18,6 +18,12 @@ class DataBaseError(Exception):
 
 @lru_cache(maxsize=1)
 def _engine() -> Engine:
+    """
+    Create and cache the configured database engine.
+
+    :return: The SQLAlchemy engine connected to the configured database.
+    :raises DataBaseError: If database configuration is missing or invalid.
+    """
     required_variables = (
         "ATTEST_DB_HOST",
         "ATTEST_DB_PORT",
@@ -48,6 +54,11 @@ def _engine() -> Engine:
 
 
 def _order_columns() -> tuple:
+    """
+    Build the columns shared by order queries.
+
+    :return: The selected order and request columns with API-facing labels.
+    """
     return (
         AttestationOrder.order_id.label("orderId"),
         AttestationRequest.requested_at.label("requestedAt"),
@@ -59,7 +70,11 @@ def _order_columns() -> tuple:
 
 
 def get_all_pending_orders() -> list[dict]:
-    """Fetch all pending orders, newest requests first."""
+    """
+    Fetch all pending orders, newest requests first.
+
+    :return: Pending order rows, ordered by request date and requester.
+    """
     statement = (
         select(*_order_columns())
         .join(AttestationOrder.request)
@@ -73,7 +88,13 @@ def get_all_pending_orders() -> list[dict]:
 
 
 def get_pending_orders(attest_type: int, sub_type: int | None) -> list[dict]:
-    """Fetch pending orders matching an attestation type and nullable subtype."""
+    """
+    Fetch pending orders matching an attestation type and nullable subtype.
+
+    :param attest_type: Attestation type to match.
+    :param sub_type: Nullable attestation subtype to match.
+    :return: Matching pending order rows, ordered by request date and requester.
+    """
     statement = (
         select(*_order_columns())
         .join(AttestationOrder.request)
@@ -91,7 +112,11 @@ def get_pending_orders(attest_type: int, sub_type: int | None) -> list[dict]:
 
 
 def get_pending_order_counts() -> list[dict]:
-    """Count pending orders by attestation type and subtype."""
+    """
+    Count pending orders by attestation type and subtype.
+
+    :return: Rows containing each attestation type, subtype, and pending count.
+    """
     statement = (
         select(
             AttestationOrder.attest_type.label("attestType"),
@@ -105,7 +130,11 @@ def get_pending_order_counts() -> list[dict]:
 
 
 def get_ordered_history() -> list[dict]:
-    """Fetch orders currently marked as ordered."""
+    """
+    Fetch orders currently marked as ordered.
+
+    :return: Ordered order rows with request and ordering details.
+    """
     statement = (
         select(
             *_order_columns()[1:],
@@ -127,7 +156,11 @@ def get_ordered_history() -> list[dict]:
 
 
 def get_completed_history() -> list[dict]:
-    """Fetch up to 1000 completed orders with their latest current-status event."""
+    """
+    Fetch up to 1000 completed orders with their latest current-status event.
+
+    :return: Completed order rows with status and processing timestamps.
+    """
     latest_event = (
         select(OrderEvent.occurred_at)
         .where(
@@ -174,7 +207,14 @@ def get_completed_history() -> list[dict]:
 
 
 def mark_orders_as_ordered(order_ids: list[str], actor: str) -> int:
-    """Mark pending orders ordered and add one event per changed order atomically."""
+    """
+    Mark pending orders ordered and add one event per changed order atomically.
+
+    :param order_ids: List of order IDs to process.
+    :param actor: Identifier of the actor marking the orders as ordered.
+    :return: Number of orders changed from pending to ordered.
+    :raises DataBaseError: If the database update fails.
+    """
     try:
         with Session(_engine()) as session, session.begin():
             changed_ids = session.scalars(
@@ -196,7 +236,16 @@ def mark_orders_as_ordered(order_ids: list[str], actor: str) -> int:
 
 
 def reject_order(order_id: str, actor: str, reason: str, description: str) -> bool:
-    """Reject a pending order and record its reason in the same transaction."""
+    """
+    Reject a pending order and record its reason in the same transaction.
+
+    :param order_id: ID of the order to reject.
+    :param actor: Identifier of the actor rejecting the order.
+    :param reason: Rejection reason to record.
+    :param description: Additional description of the rejection.
+    :return: Whether a pending order was found and rejected.
+    :raises DataBaseError: If the database update fails.
+    """
     try:
         with Session(_engine()) as session, session.begin():
             changed_id = session.scalar(
@@ -226,6 +275,14 @@ def reject_order(order_id: str, actor: str, reason: str, description: str) -> bo
 
 
 def _fetch(statement: Select, message: str) -> list[dict]:
+    """
+    Execute a query and return its rows as dictionaries.
+
+    :param statement: SQLAlchemy select statement to execute.
+    :param message: Error message to use if the database query fails.
+    :return: Query result rows as dictionaries.
+    :raises DataBaseError: If the database query fails.
+    """
     try:
         with Session(_engine()) as session:
             return [dict(row) for row in session.execute(statement).mappings()]

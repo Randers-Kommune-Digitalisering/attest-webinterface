@@ -62,9 +62,9 @@ def get_orders(attest_type: int, sub_type: str) -> tuple[dict, int]:
     """
     Get pending orders for a specific attestation type and subtype.
 
-    Param: attest_type: int: The attestation type.
-    Param: sub_type: str: The attestation subtype. Can be "null" if not specified.
-    Return: JSON response with pending orders and HTTP status code
+    :param attest_type: int: The attestation type.
+    :param sub_type: str: The attestation subtype. Can be "null" if not specified.
+    :return: JSON response with pending orders and HTTP status code
     """
     if sub_type == "null":
         parsed_sub_type = None
@@ -87,7 +87,7 @@ def get_order_count() -> tuple[dict, int]:
     """
     Get the count of all pending orders.
 
-    Return: JSON response with order counts and HTTP status code
+    :return: JSON response with order counts and HTTP status code
     """
     try:
         rows = get_pending_order_counts()
@@ -102,7 +102,7 @@ def get_ordered_history() -> tuple[dict, int]:
     """
     Get the history of ordered orders.
 
-    Return: JSON response with ordered history and HTTP status code
+    :return: JSON response with ordered history and HTTP status code
     """
     try:
         rows = fetch_ordered_history()
@@ -117,7 +117,7 @@ def get_completed_orders() -> tuple[dict, int]:
     """
     Get the history of completed orders.
 
-    Return: JSON response with completed history and HTTP status code
+    :return: JSON response with completed history and HTTP status code
     """
     try:
         rows = fetch_completed_history()
@@ -132,8 +132,8 @@ def reject_order_endpoint(order_id: str) -> tuple[dict, int]:
     """
     Reject an order with a specified reason and description.
 
-    Param: order_id: str: The ID of the order to reject.
-    Return: JSON response indicating success or failure and HTTP status code
+    :param order_id: str: The ID of the order to reject.
+    :return: JSON response indicating success or failure and HTTP status code
     """
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
@@ -177,7 +177,8 @@ def mark_order_as_ordered_endpoint() -> tuple[dict, int]:
     """
     Mark a list of orders as ordered.
 
-    Return: JSON response indicating success or failure and HTTP status code
+    :body: JSON array of order IDs to mark as ordered.
+    :return: JSON response indicating success or failure and HTTP status code
     """
     actor = _get_actor_email()
     if actor is None:
