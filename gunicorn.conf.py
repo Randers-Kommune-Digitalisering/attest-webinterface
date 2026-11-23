@@ -46,7 +46,22 @@ class AccessLogger(_GunicornLogger):
         if not hasattr(super(), "access"):
             raise RuntimeError("Gunicorn is required to use AccessLogger")
 
-        return super().access(resp, req, environ, request_time)
+        access_environ = _access_log_environ(environ, path_only)
+        return super().access(resp, req, access_environ, request_time)
+
+
+def _access_log_environ(
+    environ: dict[str, object],
+    path_only: str,
+) -> dict[str, object]:
+    """Return a log-only environment without OIDC callback query parameters."""
+    if path_only != "/api/auth":
+        return environ
+
+    sanitized_environ = environ.copy()
+    sanitized_environ["RAW_URI"] = path_only
+    sanitized_environ["QUERY_STRING"] = ""
+    return sanitized_environ
 
 
 # Keep these environment-driven so ops can tune without rebuilding.

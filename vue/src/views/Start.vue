@@ -1,6 +1,5 @@
 <script setup>
     import Content from '@/components/Content.vue'
-    import Status from '@/components/Status.vue'
 
     import IconTable from '@/components/icons/IconTable.vue'
     import IconRSS from '@/components/icons/IconRSS.vue'

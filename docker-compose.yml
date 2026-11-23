@@ -1,8 +1,27 @@
 services:
   app:
-    build: .
+    build:
+      context: .
+      target: backend
+    env_file:
+      - .env
     environment:
-      FLASK_ENV: prod
+      FLASK_ENV: dev
       PORT: "8080"
     ports:
-      - "8080:8080"
+      - "1880:8080"
+    volumes:
+      - ./src:/app/src:ro
+    command: gunicorn --reload --config gunicorn.conf.py --chdir src --bind 0.0.0.0:8080 main:app
+  frontend:
+    image: node:lts-alpine
+    working_dir: /app
+    volumes:
+      - ./vue:/app
+    environment:
+      API_PROXY_TARGET: http://app:8080
+    ports:
+      - "5173:5173"
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0"
+    depends_on:
+      - app

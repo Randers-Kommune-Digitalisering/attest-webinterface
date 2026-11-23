@@ -1,4 +1,12 @@
-FROM python:3.14-slim
+FROM node:lts-alpine AS frontend
+
+WORKDIR /app
+COPY vue/package.json vue/package-lock.json ./
+RUN npm ci
+COPY vue/ ./
+RUN npm run build
+
+FROM python:3.14-slim AS backend
 
 # Python runtime defaults
 ENV PYTHONUNBUFFERED=1 \
@@ -21,10 +29,14 @@ WORKDIR $HOME
 
 # Install python packages (install requirements first for better layer caching)
 COPY requirements.txt ./requirements.txt
-RUN pip install --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt
+RUN apt-get update && apt-get install -y --no-install-recommends git && \
+    pip install --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt && \
+    apt-get purge -y --auto-remove git && \
+    rm -rf /var/lib/apt/lists/*
 
-COPY . $HOME
+COPY src ./src
+COPY gunicorn.conf.py ./gunicorn.conf.py
 
 # Open port
 EXPOSE $PORT
@@ -34,3 +46,6 @@ USER $USER_ID
 
 # Run via gunicorn (production WSGI server)
 CMD ["sh", "-c", "gunicorn --config gunicorn.conf.py --chdir src --bind 0.0.0.0:${PORT:-8080} main:app"]
+
+FROM backend AS production
+COPY --from=frontend --chown=$USER_ID:$GROUP_ID /app/dist ./vue/dist

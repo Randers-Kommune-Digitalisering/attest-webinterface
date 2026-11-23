@@ -2,7 +2,7 @@
 Main entry point for the Flask application.
 """
 from authlib.integrations.flask_client import OAuth
-from flask import Flask, Response, jsonify, redirect, request, session, url_for
+from flask import Flask, Response, jsonify, redirect, request, send_from_directory, session, url_for
 from utils.config import get_config_class_path
 from api_endpoints import api
 from utils.logging import error_counter, set_logging_configuration
@@ -20,7 +20,7 @@ def create_app(config_object: str = "utils.config.DevConfig") -> Flask:
     :raises RuntimeError: If Keycloak is disabled in an environment where dummy authentication is not allowed,
     or if required Keycloak environment variables are missing.
     """
-    app = Flask(__name__)
+    app = Flask(__name__, static_folder="../vue/dist", static_url_path="")
     app.config.from_object(config_object)
 
     keycloak_url = app.config["KEYCLOAK_URL"]
@@ -75,7 +75,11 @@ def create_app(config_object: str = "utils.config.DevConfig") -> Flask:
 
         @app.before_request
         def check_authenticated() -> tuple[Response, int] | None:
-            if "user" not in session and request.path not in PUBLIC_PATHS:
+            if (
+                "user" not in session
+                and request.path not in PUBLIC_PATHS
+                and request.endpoint not in {"static", "frontend"}
+            ):
                 return jsonify({"success": False, "error": "Not authenticated"}), 401
 
             return None
@@ -99,6 +103,15 @@ def create_app(config_object: str = "utils.config.DevConfig") -> Flask:
         @app.route("/api/userinfo")
         def user_info() -> Response:
             return jsonify(session["user"])
+
+    @app.get("/")
+    @app.get("/vue")
+    @app.get("/templates")
+    @app.get("/orders")
+    @app.get("/history")
+    def frontend() -> Response:
+        """Serve the Vue app for its client-side routes."""
+        return send_from_directory(app.static_folder, "index.html")
 
     @app.after_request
     def count_server_errors(response: Response) -> Response:
