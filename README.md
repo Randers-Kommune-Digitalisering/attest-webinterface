@@ -82,10 +82,16 @@ Backendens forespørgsler bruger SQLAlchemy-modellerne fra den fælles
 `attest-data-model`-pakke og PostgreSQL-driveren psycopg. Pakken er fastlåst
 til et gennemgået commit i [requirements.txt](requirements.txt); opgradér kun
 til et nyt commit, når ændringen er testet. Forbindelsen konfigureres med de fem
-`ATTEST_DB_*`-miljøvariabler, som vist i [.env.example](.env.example). Backend
+grundlæggende `ATTEST_DB_*`-miljøvariabler, som vist i [.env.example](.env.example). Backend
 konstruerer forbindelsen sikkert fra de enkelte værdier, så tegn i adgangskoden
 ikke skal URL-kodes manuelt. Modellerne opretter ikke tabeller automatisk.
 Skemaet skal derfor være klar, inden applikationen startes.
+I produktion kræves `ATTEST_DB_SSL_ROOT_CERT`, som peger på en monteret
+CA-certifikatfil. Forbindelsen bruger `sslmode=verify-full`, så både kryptering,
+certifikatkæde og serverens værtsnavn kontrolleres. Servercertifikatet skal
+derfor matche `ATTEST_DB_HOST`. Ukrypteret forbindelse er kun tilladt med
+`FLASK_ENV=dev` (`ALLOW_UNENCRYPTED_DB_CONNECTIONS=True` i `DevConfig`; `False`
+i `ProdConfig`) og må kun bruges mod en lokal testdatabase.
 Modellen skal indeholde `requester_email` på `attestation_request` samt
 `rejection_reason` og `rejection_description` på `order_event`, da disse felter
 bruges af webinterfacet.
@@ -112,6 +118,7 @@ Når en bestilling markeres som bestilt eller afvises, oprettes en hændelse i `
 | `ATTEST_DB_NAME` | Ja | Navnet på databasen. |
 | `ATTEST_DB_USERNAME` | Ja | Databasebrugeren. |
 | `ATTEST_DB_PASSWORD` | Ja | Databasebrugerens adgangskode. |
+| `ATTEST_DB_SSL_ROOT_CERT` | Ja i produktion | Sti til CA-certifikatfilen for PostgreSQL-serveren. |
 | `FLASK_ENV` | Nej | Flask-konfiguration: `dev` eller `prod`. Standard er `dev`. |
 | `PORT` | Nej | Backendens port. Standard er `8080`. |
 | `DEBUG` | Nej | Aktiverer debug-logning. Standard afhænger af `FLASK_ENV`. |

@@ -1,6 +1,11 @@
 import pytest
 
-from utils.config import get_config_class_path
+from utils.config import DevConfig, ProdConfig, get_config_class_path
+
+
+def test_plaintext_database_exception_is_development_only() -> None:
+    assert DevConfig.ALLOW_UNENCRYPTED_DB_CONNECTIONS is True
+    assert ProdConfig.ALLOW_UNENCRYPTED_DB_CONNECTIONS is False
 
 
 @pytest.mark.parametrize(

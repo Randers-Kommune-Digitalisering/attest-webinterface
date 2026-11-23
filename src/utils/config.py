@@ -34,6 +34,7 @@ class DevConfig(Config):
     """
     DEBUG = os.getenv("DEBUG", "True").lower() in ("true", "1", "t")
     ALLOW_DUMMY_AUTH = True
+    ALLOW_UNENCRYPTED_DB_CONNECTIONS = True
 
 
 # ProdConfig will be used when FLASK_ENV=prod
@@ -43,6 +44,7 @@ class ProdConfig(Config):
     """
     DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
     ALLOW_DUMMY_AUTH = False
+    ALLOW_UNENCRYPTED_DB_CONNECTIONS = False
     SESSION_COOKIE_SECURE = True
 
 

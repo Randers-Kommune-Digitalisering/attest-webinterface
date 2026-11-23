@@ -6,6 +6,7 @@ from unittest.mock import Mock
 import pytest
 from attest_data_model import (AttestationOrder, AttestationRequest, Base,
                                OrderEvent, OrderStatus)
+from flask import Flask
 from sqlalchemy import create_engine, event, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
@@ -193,6 +194,7 @@ def test_database_errors_are_wrapped(
 
 def test_missing_database_configuration_is_explicit(
     monkeypatch: pytest.MonkeyPatch,
+    app: Flask,
 ) -> None:
     for variable in (
         "ATTEST_DB_HOST",
@@ -203,13 +205,16 @@ def test_missing_database_configuration_is_explicit(
     ):
         monkeypatch.delenv(variable, raising=False)
 
-    order_repository._engine.cache_clear()
-    with pytest.raises(order_repository.DataBaseError, match="ATTEST_DB_HOST"):
+    order_repository._cached_engine.cache_clear()
+    with app.app_context(), pytest.raises(
+        order_repository.DataBaseError, match="ATTEST_DB_HOST",
+    ):
         order_repository.get_all_pending_orders()
 
 
 def test_database_credentials_create_psycopg_url_safely(
     monkeypatch: pytest.MonkeyPatch,
+    app: Flask,
 ) -> None:
     create_engine_mock = Mock()
     monkeypatch.setenv("ATTEST_DB_HOST", "db.example.invalid")
@@ -218,10 +223,11 @@ def test_database_credentials_create_psycopg_url_safely(
     monkeypatch.setenv("ATTEST_DB_USERNAME", "db-user")
     monkeypatch.setenv("ATTEST_DB_PASSWORD", "p@ss:/word")
     monkeypatch.setattr(order_repository, "create_engine", create_engine_mock)
-    order_repository._engine.cache_clear()
+    order_repository._cached_engine.cache_clear()
 
-    order_repository._engine()
-    order_repository._engine()
+    with app.app_context():
+        order_repository._engine()
+        order_repository._engine()
 
     create_engine_mock.assert_called_once()
     url = create_engine_mock.call_args.args[0]
@@ -231,21 +237,103 @@ def test_database_credentials_create_psycopg_url_safely(
     assert url.host == "db.example.invalid"
     assert url.port == 5433
     assert url.database == "test"
-    order_repository._engine.cache_clear()
+    assert create_engine_mock.call_args.kwargs["connect_args"] == {
+        "sslmode": "disable",
+    }
+    order_repository._cached_engine.cache_clear()
 
 
-def test_invalid_database_port_is_explicit(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_production_database_uses_verified_tls(
+    monkeypatch: pytest.MonkeyPatch,
+    app: Flask,
+) -> None:
+    create_engine_mock = Mock()
+    monkeypatch.setenv("ATTEST_DB_HOST", "db.example.invalid")
+    monkeypatch.setenv("ATTEST_DB_PORT", "5432")
+    monkeypatch.setenv("ATTEST_DB_NAME", "test")
+    monkeypatch.setenv("ATTEST_DB_USERNAME", "user")
+    monkeypatch.setenv("ATTEST_DB_PASSWORD", "password")
+    monkeypatch.setenv("ATTEST_DB_SSL_ROOT_CERT", "/etc/db-ca.pem")
+    monkeypatch.setattr(order_repository, "create_engine", create_engine_mock)
+    order_repository._cached_engine.cache_clear()
+    app.config["ALLOW_UNENCRYPTED_DB_CONNECTIONS"] = False
+
+    with app.app_context():
+        order_repository._engine()
+
+    assert create_engine_mock.call_args.kwargs["connect_args"] == {
+        "sslmode": "verify-full",
+        "sslrootcert": "/etc/db-ca.pem",
+    }
+    order_repository._cached_engine.cache_clear()
+
+
+def test_production_database_requires_ca_certificate(
+    monkeypatch: pytest.MonkeyPatch,
+    app: Flask,
+) -> None:
+    create_engine_mock = Mock()
+    monkeypatch.setenv("ATTEST_DB_HOST", "db.example.invalid")
+    monkeypatch.setenv("ATTEST_DB_PORT", "5432")
+    monkeypatch.setenv("ATTEST_DB_NAME", "test")
+    monkeypatch.setenv("ATTEST_DB_USERNAME", "user")
+    monkeypatch.setenv("ATTEST_DB_PASSWORD", "password")
+    monkeypatch.delenv("ATTEST_DB_SSL_ROOT_CERT", raising=False)
+    monkeypatch.setattr(order_repository, "create_engine", create_engine_mock)
+    order_repository._cached_engine.cache_clear()
+    app.config["ALLOW_UNENCRYPTED_DB_CONNECTIONS"] = False
+
+    with app.app_context(), pytest.raises(
+        order_repository.DataBaseError, match="ATTEST_DB_SSL_ROOT_CERT",
+    ):
+        order_repository._engine()
+
+    create_engine_mock.assert_not_called()
+    order_repository._cached_engine.cache_clear()
+
+
+def test_production_does_not_reuse_development_engine(
+    monkeypatch: pytest.MonkeyPatch,
+    app: Flask,
+) -> None:
+    create_engine_mock = Mock()
+    monkeypatch.setenv("ATTEST_DB_HOST", "db.example.invalid")
+    monkeypatch.setenv("ATTEST_DB_PORT", "5432")
+    monkeypatch.setenv("ATTEST_DB_NAME", "test")
+    monkeypatch.setenv("ATTEST_DB_USERNAME", "user")
+    monkeypatch.setenv("ATTEST_DB_PASSWORD", "password")
+    monkeypatch.setenv("ATTEST_DB_SSL_ROOT_CERT", "/etc/db-ca.pem")
+    monkeypatch.setattr(order_repository, "create_engine", create_engine_mock)
+    order_repository._cached_engine.cache_clear()
+
+    with app.app_context():
+        order_repository._engine()
+        app.config["ALLOW_UNENCRYPTED_DB_CONNECTIONS"] = False
+        order_repository._engine()
+
+    assert [call.kwargs["connect_args"]["sslmode"] for call in create_engine_mock.call_args_list] == [
+        "disable", "verify-full",
+    ]
+    order_repository._cached_engine.cache_clear()
+
+
+def test_invalid_database_port_is_explicit(
+    monkeypatch: pytest.MonkeyPatch,
+    app: Flask,
+) -> None:
     monkeypatch.setenv("ATTEST_DB_HOST", "localhost")
     monkeypatch.setenv("ATTEST_DB_PORT", "invalid")
     monkeypatch.setenv("ATTEST_DB_NAME", "test")
     monkeypatch.setenv("ATTEST_DB_USERNAME", "user")
     monkeypatch.setenv("ATTEST_DB_PASSWORD", "password")
-    order_repository._engine.cache_clear()
+    order_repository._cached_engine.cache_clear()
 
-    with pytest.raises(order_repository.DataBaseError, match="ATTEST_DB_PORT"):
+    with app.app_context(), pytest.raises(
+        order_repository.DataBaseError, match="ATTEST_DB_PORT",
+    ):
         order_repository._engine()
 
-    order_repository._engine.cache_clear()
+    order_repository._cached_engine.cache_clear()
 
 
 def test_completed_history_is_limited_to_1000(db: Engine) -> None:

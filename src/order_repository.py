@@ -5,6 +5,7 @@ from functools import lru_cache
 
 from attest_data_model import (AttestationOrder, AttestationRequest,
                                OrderEvent, OrderStatus)
+from flask import current_app
 from sqlalchemy import Select, create_engine, func, select, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.engine.url import URL
@@ -16,12 +17,31 @@ class DataBaseError(Exception):
     """Error accessing attestation orders."""
 
 
-@lru_cache(maxsize=1)
 def _engine() -> Engine:
     """
-    Create and cache the configured database engine.
+    Get the database engine for the current application's TLS policy.
 
     :return: The SQLAlchemy engine connected to the configured database.
+    :raises DataBaseError: If database configuration is missing or invalid.
+    """
+    allow_unencrypted = current_app.config["ALLOW_UNENCRYPTED_DB_CONNECTIONS"]
+    ssl_root_cert = None
+    if not allow_unencrypted:
+        ssl_root_cert = os.environ.get("ATTEST_DB_SSL_ROOT_CERT")
+        if not ssl_root_cert:
+            raise DataBaseError("Missing database configuration: ATTEST_DB_SSL_ROOT_CERT")
+
+    return _cached_engine(allow_unencrypted, ssl_root_cert)
+
+
+@lru_cache(maxsize=2)
+def _cached_engine(allow_unencrypted: bool, ssl_root_cert: str | None) -> Engine:
+    """
+    Create and cache an engine for the specified TLS policy.
+
+    :param allow_unencrypted: Whether the development connection may use plaintext.
+    :param ssl_root_cert: Path to the trusted CA certificate in production.
+    :return: The configured SQLAlchemy engine.
     :raises DataBaseError: If database configuration is missing or invalid.
     """
     required_variables = (
@@ -50,7 +70,12 @@ def _engine() -> Engine:
     except ValueError as error:
         raise DataBaseError("ATTEST_DB_PORT must be a valid port number") from error
 
-    return create_engine(url)
+    if allow_unencrypted:
+        connect_args = {"sslmode": "disable"}
+    else:
+        connect_args = {"sslmode": "verify-full", "sslrootcert": ssl_root_cert}
+
+    return create_engine(url, connect_args=connect_args)
 
 
 def _order_columns() -> tuple:
