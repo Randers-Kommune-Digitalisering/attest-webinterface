@@ -17,6 +17,15 @@ class Config:
     POD_NAME = os.getenv("POD_NAME", "pod_name_not_set")
     PORT = int(os.getenv("PORT", "8080"))
 
+    DISABLE_KEYCLOAK = os.getenv("DISABLE_KEYCLOAK", "False").lower() in ("true", "1", "t")
+
+    KEYCLOAK_REALM = os.getenv("KEYCLOAK_REALM", "").strip()
+    KEYCLOAK_URL = os.getenv("KEYCLOAK_URL", "").strip()
+    KEYCLOAK_CLIENT_ID = os.getenv("KEYCLOAK_CLIENT_ID", "").strip()
+    KEYCLOAK_CLIENT_SECRET = os.getenv("KEYCLOAK_CLIENT_SECRET", "").strip()
+
+    SESSION_COOKIE_SAMESITE = "Lax"
+
 
 # DevConfig will be used when FLASK_ENV=dev or is not set
 class DevConfig(Config):
@@ -24,6 +33,7 @@ class DevConfig(Config):
     Development configuration.
     """
     DEBUG = os.getenv("DEBUG", "True").lower() in ("true", "1", "t")
+    ALLOW_DUMMY_AUTH = True
 
 
 # ProdConfig will be used when FLASK_ENV=prod
@@ -32,6 +42,8 @@ class ProdConfig(Config):
     Production configuration.
     """
     DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
+    ALLOW_DUMMY_AUTH = False
+    SESSION_COOKIE_SECURE = True
 
 
 def get_config_class_path() -> str:
