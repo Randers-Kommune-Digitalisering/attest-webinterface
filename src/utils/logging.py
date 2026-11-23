@@ -50,6 +50,15 @@ def disable_endpoint_logs(serving_module: type, disabled_endpoints: tuple[str, .
 
     def log_request(self: WSGIRequestHandler, *args: tuple, **kwargs: dict) -> None:
         if not any(re.match(f"{de}$", self.path) for de in disabled_endpoints):
-            parent_log_request(self, *args, **kwargs)
+            path_only = self.path.split("?", 1)[0]
+            if path_only == "/api/auth":
+                original_requestline = self.requestline
+                self.requestline = self.requestline.replace(self.path, path_only, 1)
+                try:
+                    parent_log_request(self, *args, **kwargs)
+                finally:
+                    self.requestline = original_requestline
+            else:
+                parent_log_request(self, *args, **kwargs)
 
     serving_module.WSGIRequestHandler.log_request = log_request
