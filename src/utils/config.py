@@ -17,6 +17,13 @@ class Config:
     POD_NAME = os.getenv("POD_NAME", "pod_name_not_set")
     PORT = int(os.getenv("PORT", "8080"))
 
+    ATTEST_DB_TYPE = os.getenv("ATTEST_DB_TYPE", "postgres").strip()
+    ATTEST_DB_HOST = os.getenv("ATTEST_DB_HOST", "").strip()
+    ATTEST_DB_PORT = os.getenv("ATTEST_DB_PORT", "").strip() or None
+    ATTEST_DB_NAME = os.getenv("ATTEST_DB_NAME", "").strip()
+    ATTEST_DB_USERNAME = os.getenv("ATTEST_DB_USERNAME", "").strip()
+    ATTEST_DB_PASSWORD = os.getenv("ATTEST_DB_PASSWORD", "")
+
     DISABLE_KEYCLOAK = os.getenv("DISABLE_KEYCLOAK", "False").lower() in ("true", "1", "t")
 
     KEYCLOAK_REALM = os.getenv("KEYCLOAK_REALM", "").strip()
