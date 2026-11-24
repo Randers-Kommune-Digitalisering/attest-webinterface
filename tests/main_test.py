@@ -7,8 +7,9 @@ import pytest
 from flask import Flask, redirect
 from flask.testing import FlaskClient
 
-from main import REQUIRED_ROLE, create_app, _minimal_userinfo
+from main import REQUIRED_ROLE, _minimal_userinfo, create_app
 from utils.config import DevConfig, ProdConfig
+from utils.database import DatabaseConfigurationError, DatabaseManager
 
 
 class DummyAuthNotAllowedConfig(ProdConfig):
@@ -23,6 +24,12 @@ class KeycloakConfig(ProdConfig):
     KEYCLOAK_REALM = "realm"
     KEYCLOAK_CLIENT_ID = "client"
     KEYCLOAK_CLIENT_SECRET = "client-secret"
+    ATTEST_DB_TYPE = "postgres"
+    ATTEST_DB_HOST = "db.example.invalid"
+    ATTEST_DB_PORT = 5432
+    ATTEST_DB_NAME = "attest_test"
+    ATTEST_DB_USERNAME = "attest_test"
+    ATTEST_DB_PASSWORD = "test-password"
 
 
 class MissingSecretKeyConfig(KeycloakConfig):
@@ -71,7 +78,7 @@ def test_minimal_userinfo_ignores_invalid_roles() -> None:
 
 @pytest.fixture()
 def keycloak_app() -> tuple[Flask, MagicMock]:
-    with patch("main.OAuth") as oauth_class:
+    with patch("main.OAuth") as oauth_class, patch("main.DatabaseManager"):
         app = create_app(config_object=KeycloakConfig)
 
     app.config["TESTING"] = True
@@ -87,13 +94,132 @@ def test_dummy_userinfo_returns_dummy_user() -> None:
     class Cfg(DevConfig):
         DISABLE_KEYCLOAK = True
         SECRET_KEY = "test-secret"
+        ATTEST_DB_TYPE = "postgres"
+        ATTEST_DB_HOST = "db.example.invalid"
+        ATTEST_DB_PORT = 5432
+        ATTEST_DB_NAME = "attest_test"
+        ATTEST_DB_USERNAME = "attest_test"
+        ATTEST_DB_PASSWORD = "test-password"
 
-    client = create_app(config_object=Cfg).test_client()
+    with patch("main.DatabaseManager"):
+        client = create_app(config_object=Cfg).test_client()
 
     response = client.get("/api/userinfo")
 
     assert response.status_code == 200
     assert REQUIRED_ROLE in response.get_json()["roles"]
+
+
+def test_database_manager_uses_config_without_creating_schema() -> None:
+    with patch("main.DatabaseManager.from_config") as database_manager_factory:
+        app = create_app(config_object=KeycloakConfig)
+
+    database_manager_factory.assert_called_once_with(
+        app.config,
+        profile_name="attest_db",
+        prefix="ATTEST_DB",
+    )
+    assert app.extensions["database_manager"] is database_manager_factory.return_value
+
+
+def test_database_manager_requires_connection_settings() -> None:
+    config = {
+        "ATTEST_DB_TYPE": "postgres",
+        "ATTEST_DB_HOST": "",
+        "ATTEST_DB_NAME": "attest_test",
+        "ATTEST_DB_USERNAME": "attest_test",
+        "ATTEST_DB_PASSWORD": "test-password",
+    }
+
+    with pytest.raises(DatabaseConfigurationError, match="ATTEST_DB_HOST"):
+        DatabaseManager.from_config(
+            config,
+            profile_name="attest_db",
+            prefix="ATTEST_DB",
+        )
+
+
+def test_database_manager_rejects_invalid_port() -> None:
+    config = {
+        "ATTEST_DB_TYPE": "postgres",
+        "ATTEST_DB_HOST": "db.example.invalid",
+        "ATTEST_DB_NAME": "attest_test",
+        "ATTEST_DB_USERNAME": "attest_test",
+        "ATTEST_DB_PASSWORD": "test-password",
+        "ATTEST_DB_PORT": "invalid",
+    }
+
+    with pytest.raises(DatabaseConfigurationError, match="ATTEST_DB_PORT"):
+        DatabaseManager.from_config(
+            config,
+            profile_name="attest_db",
+            prefix="ATTEST_DB",
+        )
+
+
+def test_database_manager_rejects_unsupported_database_type() -> None:
+    config = {
+        "ATTEST_DB_TYPE": "sqlite",
+        "ATTEST_DB_HOST": "db.example.invalid",
+        "ATTEST_DB_NAME": "attest_test",
+        "ATTEST_DB_USERNAME": "attest_test",
+        "ATTEST_DB_PASSWORD": "test-password",
+    }
+
+    with pytest.raises(DatabaseConfigurationError, match="ATTEST_DB_TYPE"):
+        DatabaseManager.from_config(
+            config,
+            profile_name="attest_db",
+            prefix="ATTEST_DB",
+        )
+
+
+def test_database_manager_rejects_out_of_range_port() -> None:
+    config = {
+        "ATTEST_DB_TYPE": "postgres",
+        "ATTEST_DB_HOST": "db.example.invalid",
+        "ATTEST_DB_NAME": "attest_test",
+        "ATTEST_DB_USERNAME": "attest_test",
+        "ATTEST_DB_PASSWORD": "test-password",
+        "ATTEST_DB_PORT": "70000",
+    }
+
+    with pytest.raises(DatabaseConfigurationError, match="ATTEST_DB_PORT"):
+        DatabaseManager.from_config(
+            config,
+            profile_name="attest_db",
+            prefix="ATTEST_DB",
+        )
+
+
+def test_database_manager_factory_supports_custom_prefix() -> None:
+    config = {
+        "REPORTING_DB_TYPE": " postgres ",
+        "REPORTING_DB_HOST": " db.example.invalid ",
+        "REPORTING_DB_NAME": " attest_test ",
+        "REPORTING_DB_USERNAME": " attest_test ",
+        "REPORTING_DB_PASSWORD": " test-password ",
+        "REPORTING_DB_PORT": "5432",
+    }
+
+    with patch.object(DatabaseManager, "__init__", return_value=None) as init:
+        manager = DatabaseManager.from_config(
+            config,
+            profile_name="reporting_db",
+            prefix="REPORTING_DB_",
+        )
+
+    assert isinstance(manager, DatabaseManager)
+    init.assert_called_once_with(
+        profile_name="reporting_db",
+        db_type="postgres",
+        database="attest_test",
+        username="attest_test",
+        password=" test-password ",
+        host="db.example.invalid",
+        port=5432,
+    )
+    assert "base_model" not in init.call_args.kwargs
 
 
 @pytest.mark.parametrize(
@@ -134,7 +260,7 @@ def test_frontend_served_without_login(
     (tmp_path / "assets" / "app.js").write_text("Vue asset", encoding="utf-8")
 
     client = app.test_client()
-    for route in ("/", "/vue", "/templates", "/orders", "/history"):
+    for route in ("/", "/orders", "/history"):
         response = client.get(route)
         assert response.status_code == 200
         assert b"Vue app" in response.data

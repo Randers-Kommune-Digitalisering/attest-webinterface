@@ -7,6 +7,7 @@ services:
       - .env
     environment:
       FLASK_ENV: dev
+      ATTEST_DB_HOST: host.docker.internal
       PORT: "8080"
     ports:
       - "1880:8080"

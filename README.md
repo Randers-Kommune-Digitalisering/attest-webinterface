@@ -90,8 +90,12 @@ Modellen skal indeholde `requester_email` på `attestation_request` samt
 `rejection_reason` og `rejection_description` på `order_event`, da disse felter
 bruges af webinterfacet.
 
-Den anden applikation skal bruge samme gennemgåede pakkeversion og databaseskema.
-Ændringer af skemaet skal styres særskilt fra modellen.
+Alle applikationer skal bruge samme gennemgåede version af
+`attest-data-model`. Modellerne opretter ikke tabeller automatisk i denne
+applikation. Skemaet ejes af X-Flow API-projektet og skal ændres med en
+koordineret Alembic-migration dér, før applikationerne opgraderes til en ny
+modelversion. `DatabaseManager` kontrollerer forbindelsen ved opstart; den
+opretter eller migrerer ikke databasen eller tabellerne.
 
 Historik-endpoints returnerer personoplysninger, herunder rekvirentens navn, email og DQ-nummer og CPR-nummeret på den person bestillingen vedrører. Oplysningerne bruges til at administrere og følge op på attestbestillinger. Adgang kræver login og rollen `attest-admin`.
 
@@ -107,6 +111,7 @@ Når en bestilling markeres som bestilt eller afvises, oprettes en hændelse i `
 ### Miljøvariabler
 | Variabel | Påkrævet | Beskrivelse |
 |---|---:|---|
+| `ATTEST_DB_TYPE` | Nej | Databasetype til `rkdigi.DatabaseManager`. Standard er `postgres`. |
 | `ATTEST_DB_HOST` | Ja | PostgreSQL-serverens værtsnavn eller IP-adresse. |
 | `ATTEST_DB_PORT` | Ja | PostgreSQL-serverens port. |
 | `ATTEST_DB_NAME` | Ja | Navnet på databasen. |
@@ -182,6 +187,12 @@ Vue/Vite åbnes på `http://localhost:5173`, og Flask er tilgængelig på
 `http://localhost:1880`. Vite videresender `/api` til Flask i Compose-netværket.
 Frontend-koden opdateres automatisk, og Gunicorn genindlæser backend-kode ved
 ændringer. Brug kun opdigtede testdata i den lokale database.
+Databasen og dens skema skal være oprettet af skemaejeren, før Flask-servicen
+startes; denne applikation opretter ikke tabeller ved opstart. Hvis PostgreSQL
+kører i en separat container med en publiceret port, skal Flask-containeren
+bruge `host.docker.internal` som værtsnavn og den publicerede værtsport. Hvis
+begge services deler et Docker-netværk, bruges i stedet PostgreSQL-servicens
+navn og containerport.
 
 Til produktion: byg billedet med `docker build -t attest-webinterface .`.
 Produktionsbilledet indeholder den byggede Vue-frontend og Flask-API'et på

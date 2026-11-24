@@ -2,9 +2,12 @@
 Main entry point for the Flask application.
 """
 from authlib.integrations.flask_client import OAuth
-from flask import Flask, Response, jsonify, redirect, request, send_from_directory, session, url_for
-from utils.config import get_config_class_path
+from flask import (Flask, Response, jsonify, redirect, request,
+                   send_from_directory, session, url_for)
+
 from api_endpoints import api
+from utils.config import get_config_class_path
+from utils.database import DatabaseManager
 from utils.logging import error_counter, set_logging_configuration
 
 REQUIRED_ROLE = "attest-admin"
@@ -31,12 +34,26 @@ def create_app(config_object: str = "utils.config.DevConfig") -> Flask:
     debug = bool(app.config.get("DEBUG", False))
     set_logging_configuration(debug=debug)
 
-    app.register_blueprint(api)
-
     if app.config["DISABLE_KEYCLOAK"]:
         if not app.config.get("ALLOW_DUMMY_AUTH", False):
             raise RuntimeError("DISABLE_KEYCLOAK is not allowed in this environment")
+    else:
+        secret_key = app.config.get("SECRET_KEY")
+        if not secret_key or secret_key == "CHANGE_ME":
+            raise RuntimeError("Missing or invalid SECRET_KEY environment variable")
 
+        if not all([keycloak_url, client_id, client_secret, keycloak_realm]):
+            raise RuntimeError("Missing environment variable(s) for Keycloak - set DISABLE_KEYCLOAK=true to run without Keycloak")
+
+    app.extensions["database_manager"] = DatabaseManager.from_config(
+        app.config,
+        profile_name="attest_db",
+        prefix="ATTEST_DB",
+    )
+
+    app.register_blueprint(api)
+
+    if app.config["DISABLE_KEYCLOAK"]:
         # Dummy authentication for development/testing without Keycloak
         @app.before_request
         def set_dummy_user() -> None:
@@ -53,14 +70,6 @@ def create_app(config_object: str = "utils.config.DevConfig") -> Flask:
 
     else:
         # Setup Keycloak OAuth
-        # Verify required environment variables for Keycloak
-        secret_key = app.config.get("SECRET_KEY")
-        if not secret_key or secret_key == "CHANGE_ME":
-            raise RuntimeError("Missing or invalid SECRET_KEY environment variable")
-
-        if not all([keycloak_url, client_id, client_secret, keycloak_realm]):
-            raise RuntimeError("Missing environment variable(s) for Keycloak - set DISABLE_KEYCLOAK=true to run without Keycloak")
-
         oauth = OAuth(app)
         oauth.register(
             name="keycloak",
@@ -105,8 +114,6 @@ def create_app(config_object: str = "utils.config.DevConfig") -> Flask:
             return jsonify(session["user"])
 
     @app.get("/")
-    @app.get("/vue")
-    @app.get("/templates")
     @app.get("/orders")
     @app.get("/history")
     def frontend() -> Response:
@@ -160,7 +167,7 @@ def _minimal_userinfo(userinfo: dict | None, client_id: str) -> dict:
     }
 
 
-# WSGI entrypoint for `gunicorn --chdir src main:app`
+# WSGI application loaded by Gunicorn via `main:app`.
 app = create_app(config_object=get_config_class_path())
 
 

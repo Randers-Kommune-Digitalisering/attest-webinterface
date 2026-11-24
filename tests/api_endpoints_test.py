@@ -5,7 +5,7 @@ import pytest
 from flask.testing import FlaskClient
 
 from api_endpoints import REJECTION_DESCRIPTIONS
-from order_repository import DataBaseError
+from attest_database import DataBaseError
 
 
 def test_status_returns_success(client: FlaskClient) -> None:
@@ -39,7 +39,9 @@ def test_read_endpoints_return_repository_rows(
 
     assert response.status_code == 200
     assert response.json == rows
-    repository_call.assert_called_once_with()
+    repository_call.assert_called_once_with(
+        database_manager=client.application.extensions["database_manager"],
+    )
 
 
 def test_get_orders_converts_null_subtype_to_none(
@@ -55,7 +57,11 @@ def test_get_orders_converts_null_subtype_to_none(
 
     assert response.status_code == 200
     assert response.get_json() == rows
-    repository_call.assert_called_once_with(2, None)
+    repository_call.assert_called_once_with(
+        2,
+        None,
+        database_manager=client.application.extensions["database_manager"],
+    )
 
 
 def test_get_orders_converts_numeric_subtype(
@@ -68,7 +74,11 @@ def test_get_orders_converts_numeric_subtype(
         response = client.get("/api/orders/2/3")
 
     assert response.status_code == 200
-    repository_call.assert_called_once_with(2, 3)
+    repository_call.assert_called_once_with(
+        2,
+        3,
+        database_manager=client.application.extensions["database_manager"],
+    )
 
 
 def test_get_orders_rejects_invalid_subtype(
@@ -134,6 +144,7 @@ def test_process_orders_marks_orders_with_actor_email(
     repository_call.assert_called_once_with(
         order_ids=["order-1", "order-2"],
         actor="test@test.dk",
+        database_manager=client.application.extensions["database_manager"],
     )
 
 
@@ -196,6 +207,7 @@ def test_reject_order_trims_custom_description(
         actor="test@test.dk",
         reason="other",
         description="Beskrivelse",
+        database_manager=client.application.extensions["database_manager"],
     )
 
 
@@ -222,6 +234,7 @@ def test_reject_order_uses_standard_description(
         actor="test@test.dk",
         reason=reason,
         description=REJECTION_DESCRIPTIONS[reason],
+        database_manager=client.application.extensions["database_manager"],
     )
 
 

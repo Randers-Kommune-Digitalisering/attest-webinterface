@@ -1,56 +1,14 @@
 """Database queries and operations for attestation orders."""
 
-import os
-from functools import lru_cache
-
 from attest_data_model import (AttestationOrder, AttestationRequest,
                                OrderEvent, OrderStatus)
-from sqlalchemy import Select, create_engine, func, select, update
-from sqlalchemy.engine import Engine
-from sqlalchemy.engine.url import URL
+from rkdigi import DatabaseManager
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
 
 
 class DataBaseError(Exception):
     """Error accessing attestation orders."""
-
-
-@lru_cache(maxsize=1)
-def _engine() -> Engine:
-    """
-    Create and cache the configured database engine.
-
-    :return: The SQLAlchemy engine connected to the configured database.
-    :raises DataBaseError: If database configuration is missing or invalid.
-    """
-    required_variables = (
-        "ATTEST_DB_HOST",
-        "ATTEST_DB_PORT",
-        "ATTEST_DB_NAME",
-        "ATTEST_DB_USERNAME",
-        "ATTEST_DB_PASSWORD",
-    )
-    missing_variables = [
-        variable for variable in required_variables if not os.environ.get(variable)
-    ]
-    if missing_variables:
-        missing = ", ".join(missing_variables)
-        raise DataBaseError(f"Missing database configuration: {missing}")
-
-    try:
-        url = URL.create(
-            "postgresql+psycopg",
-            username=os.environ["ATTEST_DB_USERNAME"],
-            password=os.environ["ATTEST_DB_PASSWORD"],
-            host=os.environ["ATTEST_DB_HOST"],
-            port=int(os.environ["ATTEST_DB_PORT"]),
-            database=os.environ["ATTEST_DB_NAME"],
-        )
-    except ValueError as error:
-        raise DataBaseError("ATTEST_DB_PORT must be a valid port number") from error
-
-    return create_engine(url)
 
 
 def _order_columns() -> tuple:
@@ -69,10 +27,11 @@ def _order_columns() -> tuple:
     )
 
 
-def get_all_pending_orders() -> list[dict]:
+def get_all_pending_orders(database_manager: DatabaseManager) -> list[dict]:
     """
     Fetch all pending orders, newest requests first.
 
+    :param database_manager: Manager connected to the application database.
     :return: Pending order rows, ordered by request date and requester.
     """
     statement = (
@@ -84,15 +43,24 @@ def get_all_pending_orders() -> list[dict]:
             AttestationRequest.requester_dq,
         )
     )
-    return _fetch(statement, "Couldn't fetch all pending orders")
+    return _fetch(
+        database_manager,
+        statement,
+        "Couldn't fetch all pending orders",
+    )
 
 
-def get_pending_orders(attest_type: int, sub_type: int | None) -> list[dict]:
+def get_pending_orders(
+    attest_type: int,
+    sub_type: int | None,
+    database_manager: DatabaseManager,
+) -> list[dict]:
     """
     Fetch pending orders matching an attestation type and nullable subtype.
 
     :param attest_type: Attestation type to match.
     :param sub_type: Nullable attestation subtype to match.
+    :param database_manager: Manager connected to the application database.
     :return: Matching pending order rows, ordered by request date and requester.
     """
     statement = (
@@ -108,13 +76,14 @@ def get_pending_orders(attest_type: int, sub_type: int | None) -> list[dict]:
             AttestationRequest.requester_dq,
         )
     )
-    return _fetch(statement, "Couldn't fetch pending orders")
+    return _fetch(database_manager, statement, "Couldn't fetch pending orders")
 
 
-def get_pending_order_counts() -> list[dict]:
+def get_pending_order_counts(database_manager: DatabaseManager) -> list[dict]:
     """
     Count pending orders by attestation type and subtype.
 
+    :param database_manager: Manager connected to the application database.
     :return: Rows containing each attestation type, subtype, and pending count.
     """
     statement = (
@@ -126,13 +95,18 @@ def get_pending_order_counts() -> list[dict]:
         .where(AttestationOrder.status == OrderStatus.PENDING_ORDER)
         .group_by(AttestationOrder.attest_type, AttestationOrder.attest_subtype)
     )
-    return _fetch(statement, "Couldn't fetch pending order counts")
+    return _fetch(
+        database_manager,
+        statement,
+        "Couldn't fetch pending order counts",
+    )
 
 
-def get_ordered_history() -> list[dict]:
+def get_ordered_history(database_manager: DatabaseManager) -> list[dict]:
     """
     Fetch orders currently marked as ordered.
 
+    :param database_manager: Manager connected to the application database.
     :return: Ordered order rows with request and ordering details.
     """
     statement = (
@@ -152,13 +126,14 @@ def get_ordered_history() -> list[dict]:
             AttestationRequest.requester_dq,
         )
     )
-    return _fetch(statement, "Couldn't fetch ordered history")
+    return _fetch(database_manager, statement, "Couldn't fetch ordered history")
 
 
-def get_completed_history() -> list[dict]:
+def get_completed_history(database_manager: DatabaseManager) -> list[dict]:
     """
     Fetch up to 1000 completed orders with their latest current-status event.
 
+    :param database_manager: Manager connected to the application database.
     :return: Completed order rows with status and processing timestamps.
     """
     latest_event = (
@@ -199,24 +174,33 @@ def get_completed_history() -> list[dict]:
         )
         .limit(1000)
     )
-    rows = _fetch(statement, "Couldn't fetch completed history")
+    rows = _fetch(
+        database_manager,
+        statement,
+        "Couldn't fetch completed history",
+    )
     for row in rows:
         row["status"] = row["status"].value
 
     return rows
 
 
-def mark_orders_as_ordered(order_ids: list[str], actor: str) -> int:
+def mark_orders_as_ordered(
+    order_ids: list[str],
+    actor: str,
+    database_manager: DatabaseManager,
+) -> int:
     """
     Mark pending orders ordered and add one event per changed order atomically.
 
     :param order_ids: List of order IDs to process.
     :param actor: Identifier of the actor marking the orders as ordered.
+    :param database_manager: Manager connected to the application database.
     :return: Number of orders changed from pending to ordered.
     :raises DataBaseError: If the database update fails.
     """
     try:
-        with Session(_engine()) as session, session.begin():
+        with database_manager.get_session() as session, session.begin():
             changed_ids = session.scalars(
                 update(AttestationOrder)
                 .where(
@@ -235,7 +219,13 @@ def mark_orders_as_ordered(order_ids: list[str], actor: str) -> int:
         raise DataBaseError("Couldn't mark orders as ordered") from error
 
 
-def reject_order(order_id: str, actor: str, reason: str, description: str) -> bool:
+def reject_order(
+    order_id: str,
+    actor: str,
+    reason: str,
+    description: str,
+    database_manager: DatabaseManager,
+) -> bool:
     """
     Reject a pending order and record its reason in the same transaction.
 
@@ -243,11 +233,12 @@ def reject_order(order_id: str, actor: str, reason: str, description: str) -> bo
     :param actor: Identifier of the actor rejecting the order.
     :param reason: Rejection reason to record.
     :param description: Additional description of the rejection.
+    :param database_manager: Manager connected to the application database.
     :return: Whether a pending order was found and rejected.
     :raises DataBaseError: If the database update fails.
     """
     try:
-        with Session(_engine()) as session, session.begin():
+        with database_manager.get_session() as session, session.begin():
             changed_id = session.scalar(
                 update(AttestationOrder)
                 .where(
@@ -274,17 +265,22 @@ def reject_order(order_id: str, actor: str, reason: str, description: str) -> bo
         raise DataBaseError("Couldn't reject order") from error
 
 
-def _fetch(statement: Select, message: str) -> list[dict]:
+def _fetch(
+    database_manager: DatabaseManager,
+    statement: Select,
+    message: str,
+) -> list[dict]:
     """
     Execute a query and return its rows as dictionaries.
 
+    :param database_manager: Manager connected to the application database.
     :param statement: SQLAlchemy select statement to execute.
     :param message: Error message to use if the database query fails.
     :return: Query result rows as dictionaries.
     :raises DataBaseError: If the database query fails.
     """
     try:
-        with Session(_engine()) as session:
+        with database_manager.get_session() as session:
             return [dict(row) for row in session.execute(statement).mappings()]
     except SQLAlchemyError as error:
         raise DataBaseError(message) from error

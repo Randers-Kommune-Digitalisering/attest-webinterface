@@ -2,21 +2,22 @@
 API endpoints for the Flask application.
 """
 import logging
-from flask import Blueprint, jsonify, request, session
 
-from order_repository import (
-    get_pending_orders,
-    get_all_pending_orders,
-    get_pending_order_counts,
-    get_ordered_history as fetch_ordered_history,
-    get_completed_history as fetch_completed_history,
-    mark_orders_as_ordered,
-    reject_order,
-    DataBaseError,
-)
+from flask import Blueprint, current_app, jsonify, request, session
+from rkdigi import DatabaseManager
+
+from attest_database import DataBaseError, get_all_pending_orders
+from attest_database import get_completed_history as fetch_completed_history
+from attest_database import get_ordered_history as fetch_ordered_history
+from attest_database import (get_pending_order_counts, get_pending_orders,
+                             mark_orders_as_ordered, reject_order)
 
 api = Blueprint("api", __name__, url_prefix="/api")
 logger = logging.getLogger(__name__)
+
+
+def _database_manager() -> DatabaseManager:
+    return current_app.extensions["database_manager"]
 
 
 REJECTION_DESCRIPTIONS = {
@@ -50,7 +51,7 @@ def get_all_orders() -> tuple[dict, int]:
     Return: JSON response with all pending orders and HTTP status code
     """
     try:
-        rows = get_all_pending_orders()
+        rows = get_all_pending_orders(database_manager=_database_manager())
         return jsonify(rows), 200
     except DataBaseError as error:
         logger.error("Failed to fetch all orders: %s", error)
@@ -75,7 +76,11 @@ def get_orders(attest_type: int, sub_type: str) -> tuple[dict, int]:
             return jsonify({"success": False, "error": "Invalid attestation subtype"}), 400
 
     try:
-        rows = get_pending_orders(attest_type, parsed_sub_type)
+        rows = get_pending_orders(
+            attest_type,
+            parsed_sub_type,
+            database_manager=_database_manager(),
+        )
         return jsonify(rows), 200
     except DataBaseError as error:
         logger.error("Failed to fetch orders: %s", error)
@@ -90,7 +95,7 @@ def get_order_count() -> tuple[dict, int]:
     :return: JSON response with order counts and HTTP status code
     """
     try:
-        rows = get_pending_order_counts()
+        rows = get_pending_order_counts(database_manager=_database_manager())
         return jsonify(rows), 200
     except DataBaseError as error:
         logger.error("Failed to fetch order counts: %s", error)
@@ -105,7 +110,7 @@ def get_ordered_history() -> tuple[dict, int]:
     :return: JSON response with ordered history and HTTP status code
     """
     try:
-        rows = fetch_ordered_history()
+        rows = fetch_ordered_history(database_manager=_database_manager())
         return jsonify(rows), 200
     except DataBaseError as error:
         logger.error("Failed to fetch ordered history: %s", error)
@@ -120,7 +125,7 @@ def get_completed_orders() -> tuple[dict, int]:
     :return: JSON response with completed history and HTTP status code
     """
     try:
-        rows = fetch_completed_history()
+        rows = fetch_completed_history(database_manager=_database_manager())
         return jsonify(rows), 200
     except DataBaseError as error:
         logger.error("Failed to fetch completed history: %s", error)
@@ -165,6 +170,7 @@ def reject_order_endpoint(order_id: str) -> tuple[dict, int]:
             actor=actor,
             reason=reason,
             description=description,
+            database_manager=_database_manager(),
         )
         return jsonify({"success": success}), 200
     except DataBaseError as error:
@@ -196,6 +202,7 @@ def mark_order_as_ordered_endpoint() -> tuple[dict, int]:
         updated_count: int = mark_orders_as_ordered(
             order_ids=order_ids,
             actor=actor,
+            database_manager=_database_manager(),
         )
         return jsonify({"success": True, "updated_count": updated_count}), 200
     except DataBaseError as error:
